@@ -1363,7 +1363,7 @@ export function FarmAuctionApp() {
           </div>
         </div>
         <div className="hero-photo">
-          <img src="/images/hero-fields.jpg" alt="Saskatchewan farmland at sunset" />
+          <img src="/images/lots/hero.png" alt="Saskatchewan farmland at sunset" />
           {liveAuction && liveAuction.status === "open" ? (
             <span className="badge">
               <span className="dot"></span>Live · {liveAuction.title}

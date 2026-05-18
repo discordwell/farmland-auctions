@@ -81,9 +81,7 @@ type SeedListing = {
   publish: boolean;
 };
 
-const HERO = "/images/hero-fields.jpg";
 const SAT = "/images/satellite-fields.jpg";
-const HARVEST = "/images/harvest.jpg";
 
 // Per-lot art (under public/images/lots/) generated for the demo.
 // Lots that don't have bespoke art fall back to the stock hero/harvest images.
@@ -93,7 +91,11 @@ const lotArt = {
   vanscoy: "/images/lots/vanscoy-three-quarter.png",
   coalfields: "/images/lots/coalfields-pasture.png",
   buckland: "/images/lots/buckland-section.png",
-  snipeLake: "/images/lots/snipe-lake-wanted.png"
+  snipeLake: "/images/lots/snipe-lake-wanted.png",
+  eyebrow: "/images/lots/eyebrow-quarter.png",
+  edenwold: "/images/lots/edenwold-half-section.png",
+  hudsonBay: "/images/lots/hudson-bay-pasture-lease.png",
+  battleRiver: "/images/lots/battle-river-quarter.png"
 };
 
 const listings: SeedListing[] = [
@@ -294,7 +296,7 @@ const listings: SeedListing[] = [
     status: "For Sale",
     latitude: 50.74,
     longitude: -105.83,
-    image: HERO,
+    image: lotArt.eyebrow,
     satellite: SAT,
     description: "Quarter section, cultivated, in canola–wheat rotation. Highway frontage.",
     highlights: [
@@ -322,7 +324,7 @@ const listings: SeedListing[] = [
     status: "For Sale",
     latitude: 50.61,
     longitude: -104.45,
-    image: HARVEST,
+    image: lotArt.edenwold,
     satellite: SAT,
     description: "Two quarters of class 1 chernozem inside 30 min of Regina. Rentable yard site.",
     highlights: [
@@ -352,7 +354,7 @@ const listings: SeedListing[] = [
     status: "Lease",
     latitude: 52.85,
     longitude: -102.4,
-    image: HARVEST,
+    image: lotArt.hudsonBay,
     satellite: SAT,
     description: "Five-year community pasture lease on 480 ac aspen parkland.",
     highlights: [
@@ -380,7 +382,7 @@ const listings: SeedListing[] = [
     status: "For Sale",
     latitude: 52.78,
     longitude: -109.41,
-    image: HERO,
+    image: lotArt.battleRiver,
     satellite: SAT,
     description: "Quarter section, cultivated, soils trending to grey-wooded on north end.",
     highlights: [

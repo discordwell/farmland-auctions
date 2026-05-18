@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     siteName: "Wyatt Farmland Auctions",
     images: [
       {
-        url: "/images/hero-fields.jpg",
+        url: "/images/lots/hero.png",
         width: 1600,
         height: 900,
         alt: "Saskatchewan farmland at sunset"
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     title: "Wyatt Farmland Auctions",
     description:
       "Saskatchewan farmland listings, bidder registration, and live auction workflows.",
-    images: ["/images/hero-fields.jpg"]
+    images: ["/images/lots/hero.png"]
   }
 };
 

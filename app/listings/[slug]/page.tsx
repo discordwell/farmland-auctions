@@ -54,7 +54,7 @@ export async function generateMetadata({
   const title = `${listing.title} · ${listing.rm} | Wyatt Farmland Auctions`;
   const description = buildDescription(listing);
   const url = `${SITE_URL}/listings/${slug}/`;
-  const image = listing.image?.startsWith("http") ? listing.image : `${SITE_URL}${listing.image || "/images/hero-fields.jpg"}`;
+  const image = listing.image?.startsWith("http") ? listing.image : `${SITE_URL}${listing.image || "/images/lots/hero.png"}`;
 
   return {
     title,
