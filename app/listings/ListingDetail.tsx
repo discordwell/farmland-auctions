@@ -1,7 +1,13 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { type Listing } from "../data";
+
+const LeafletEmbed = dynamic(
+  () => import("../components/LeafletEmbed").then((m) => m.LeafletEmbed),
+  { ssr: false, loading: () => <div className="leaflet-host leaflet-embed" /> }
+);
 
 const cad = new Intl.NumberFormat("en-CA", {
   style: "currency",
@@ -19,6 +25,7 @@ export function ListingDetail() {
   const [listing, setListing] = useState<Listing | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [activePhoto, setActivePhoto] = useState(0);
   const [inquiryStatus, setInquiryStatus] = useState("");
   const [inquiryError, setInquiryError] = useState("");
 
@@ -155,8 +162,39 @@ export function ListingDetail() {
             </div>
 
             <div className="detail-grid">
-              <div className="detail-media">
-                <img src={listing.image} alt={listing.title} />
+              <div className="detail-media-stack">
+                {(() => {
+                  const gallery = [
+                    { url: listing.image, caption: "" },
+                    ...(listing.photos ?? []).filter((p) => p.url && p.url !== listing.image)
+                  ];
+                  const safeIdx = Math.min(activePhoto, gallery.length - 1);
+                  return (
+                    <>
+                      <div className="detail-media">
+                        <img src={gallery[safeIdx].url} alt={gallery[safeIdx].caption || listing.title} />
+                        {gallery[safeIdx].caption ? (
+                          <span className="detail-media-caption">{gallery[safeIdx].caption}</span>
+                        ) : null}
+                      </div>
+                      {gallery.length > 1 ? (
+                        <div className="detail-thumbs" role="tablist" aria-label="Lot photos">
+                          {gallery.map((photo, idx) => (
+                            <button
+                              key={photo.url + idx}
+                              type="button"
+                              className={`detail-thumb${idx === safeIdx ? " on" : ""}`}
+                              onClick={() => setActivePhoto(idx)}
+                              aria-label={photo.caption || `Photo ${idx + 1}`}
+                            >
+                              <img src={photo.url} alt="" />
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </>
+                  );
+                })()}
               </div>
 
               <aside className="detail-side">
@@ -202,6 +240,14 @@ export function ListingDetail() {
 
             {listing.description ? (
               <p className="detail-description">{listing.description}</p>
+            ) : null}
+
+            {listing.latitude != null && listing.longitude != null ? (
+              <LeafletEmbed
+                latitude={listing.latitude}
+                longitude={listing.longitude}
+                label={`${listing.title} · ${listing.rm}`}
+              />
             ) : null}
 
             <div className="detail-inquiry">

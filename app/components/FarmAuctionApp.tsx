@@ -1,9 +1,15 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { Menu, X } from "lucide-react";
 import { type Listing, type ListingStatus } from "../data";
 import { useAuth } from "../lib/useAuth";
+
+const LeafletMap = dynamic(() => import("./LeafletMap").then((m) => m.LeafletMap), {
+  ssr: false,
+  loading: () => <div className="leaflet-host" aria-label="Loading map" />
+});
 
 const statuses: Array<ListingStatus | "All"> = [
   "All",
@@ -501,20 +507,7 @@ function RmMap({
   listings: Listing[];
   lotNumberFor: (id: string) => number;
 }) {
-  const pins = listings
-    .map((listing) => {
-      const position = listingPinPosition(listing);
-      if (!position) return null;
-      return {
-        index: lotNumberFor(listing.id),
-        label: listing.rm.replace(/^RM\s*/i, "").replace(/\s+No\.\s*\d+/i, (m) => m.trim()),
-        status: listing.status,
-        ...position
-      };
-    })
-    .filter((pin): pin is { index: number; label: string; left: string; top: string; status: ListingStatus } =>
-      Boolean(pin)
-    );
+  const pins = listings.filter((l) => l.latitude != null && l.longitude != null);
 
   const counts = useMemo(() => {
     const all = { "For Sale": 0, Pending: 0, Sold: 0, Wanted: 0, Lease: 0 } as Record<ListingStatus, number>;
@@ -536,35 +529,14 @@ function RmMap({
         </div>
       </div>
       <div className="map-surface">
-        <CompassRose />
-        {pins.length ? (
-          pins.map((pin) => (
-            <span
-              className={`pin s-${statusSlug(pin.status)}`}
-              key={`${pin.label}-${pin.left}-${pin.top}-${pin.index}`}
-              style={{ top: pin.top, left: pin.left }}
-              title={`${pin.label}: ${pin.status}`}
-            >
-              <span className="num">{formatLotNumber(pin.index)}</span> {pin.label}
-            </span>
-          ))
+        {listings.length ? (
+          <LeafletMap listings={listings} lotNumberFor={lotNumberFor} />
         ) : (
           <div className="map-empty">
             <strong>No mapped files</strong>
-            Listings with coordinates appear on the plate.
+            Listings with coordinates appear here.
           </div>
         )}
-        <div className="map-title">
-          <div>
-            <div className="name">
-              <em>Open files</em>
-            </div>
-          </div>
-          <div className="bar">
-            0 — 250 km
-            <div className="line"></div>
-          </div>
-        </div>
       </div>
       <div className="legend">
         <div className="item">

@@ -259,6 +259,14 @@ export function AdminConsole() {
           .split("\n")
           .map((item) => item.trim())
           .filter(Boolean),
+        photos: String(data.get("photos") ?? "")
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => {
+            const [url, ...captionParts] = line.split("|");
+            return { url: url.trim(), caption: captionParts.join("|").trim() };
+          }),
         image: data.get("image"),
         pricePerAcre: data.get("pricePerAcre"),
         publish: data.get("publish") === "on",
@@ -519,6 +527,10 @@ export function AdminConsole() {
               />
               <textarea name="description" placeholder="Description" />
               <textarea name="highlights" placeholder="Highlights, one per line" />
+              <textarea
+                name="photos"
+                placeholder="Additional photo URLs — one per line. Optionally pipe a caption: https://… | Aerial, July"
+              />
               <label className="admin-check">
                 <input name="publish" type="checkbox" />
                 Publish to the book

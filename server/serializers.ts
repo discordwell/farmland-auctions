@@ -36,6 +36,7 @@ export function serializeListing(row: QueryResultRow) {
     longitude,
     description: row.description as string,
     highlights: (row.highlights ?? []) as string[],
+    photos: (row.photos ?? []) as Array<{ url: string; caption?: string }>,
     publishedAt: row.published_at as string | null,
     updatedAt: row.updated_at as string
   };

@@ -1209,27 +1209,7 @@ section.band + section.band {
   margin: 14px;
   overflow: hidden;
   background-color: #2a3a2c;
-  background-image:
-    linear-gradient(rgba(239, 231, 211, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(239, 231, 211, 0.08) 1px, transparent 1px),
-    linear-gradient(rgba(239, 231, 211, 0.15) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(239, 231, 211, 0.15) 1px, transparent 1px),
-    url("/images/satellite-fields.jpg");
-  background-size:
-    18px 18px,
-    18px 18px,
-    108px 108px,
-    108px 108px,
-    cover;
-  background-position: center;
   border: var(--hair);
-}
-.map-surface::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(20, 32, 26, 0.35), rgba(20, 32, 26, 0.55));
-  pointer-events: none;
 }
 
 .compass {
@@ -2890,12 +2870,60 @@ footer.colophon {
   align-items: start;
 }
 
+.detail-media-stack {
+  display: grid;
+  gap: 10px;
+}
+
 .detail-media {
   position: relative;
   aspect-ratio: 16 / 10;
   overflow: hidden;
   background: #2a2519;
   border: var(--hair);
+}
+.detail-media-caption {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 2;
+  padding: 6px 10px;
+  background: rgba(20, 32, 26, 0.78);
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+}
+
+.detail-thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+}
+.detail-thumb {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: var(--paper-deep);
+  border: var(--hair-soft);
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+}
+.detail-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: contrast(1.04) saturate(0.92);
+  transition: filter 0.15s ease, opacity 0.15s ease;
+  opacity: 0.7;
+}
+.detail-thumb:hover img,
+.detail-thumb.on img {
+  opacity: 1;
+}
+.detail-thumb.on {
+  border-color: var(--ink);
+  outline: 1px solid var(--ink);
 }
 .detail-media img {
   position: absolute;
@@ -3027,6 +3055,144 @@ footer.colophon {
   letter-spacing: -0.014em;
   color: var(--ink);
   max-width: 16ch;
+}
+
+/* =========================================================
+   14c. LEAFLET MAPS
+   ========================================================= */
+
+.leaflet-host {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #14201a;
+}
+
+.leaflet-host.leaflet-embed {
+  height: 320px;
+  border: var(--hair);
+  margin-top: 18px;
+}
+
+.leaflet-host .leaflet-container {
+  width: 100%;
+  height: 100%;
+  background: #14201a;
+  font-family: var(--mono);
+}
+
+/* Custom marker styling */
+.lot-marker {
+  position: relative;
+  background: transparent;
+  border: 0;
+}
+.lot-marker-dot {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--paper);
+  box-shadow: 0 0 0 1px var(--ink), 0 4px 10px rgba(0, 0, 0, 0.5);
+}
+.lot-marker-label {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 7px;
+  background: rgba(239, 231, 211, 0.95);
+  border: 1px solid var(--ink);
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.lot-marker:hover .lot-marker-label {
+  opacity: 1;
+}
+.lot-marker-num {
+  color: var(--wheat);
+  font-weight: 600;
+}
+
+/* Popup */
+.leaflet-popup-content-wrapper {
+  background: var(--paper);
+  color: var(--ink);
+  border: var(--hair);
+  border-radius: 2px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+.leaflet-popup-tip {
+  background: var(--paper);
+  border-right: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+}
+.leaflet-popup-content {
+  margin: 12px 14px;
+  font-family: var(--sans);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+.lot-popup {
+  display: grid;
+  gap: 4px;
+}
+.lot-popup strong {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--wheat);
+}
+.lot-popup span {
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+.lot-popup span.meta {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--mute);
+}
+.lot-popup a {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+  border-bottom: 1px solid var(--ink);
+  padding-bottom: 1px;
+  margin-top: 4px;
+  width: max-content;
+}
+
+.leaflet-control-attribution {
+  background: rgba(20, 32, 26, 0.7) !important;
+  color: var(--paper) !important;
+  font-family: var(--mono) !important;
+  font-size: 0.6rem !important;
+}
+.leaflet-control-attribution a {
+  color: var(--wheat) !important;
+}
+.leaflet-bar a {
+  background: var(--paper) !important;
+  color: var(--ink) !important;
+  border-bottom-color: var(--rule) !important;
+}
+.leaflet-bar a:hover {
+  background: var(--paper-soft) !important;
 }
 
 /* =========================================================

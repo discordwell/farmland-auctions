@@ -105,6 +105,15 @@ const adminListingBodySchema = z.object({
   satellite: z.string().min(1),
   description: z.string().default(""),
   highlights: z.array(z.string().min(1)).default([]),
+  photos: z
+    .array(
+      z.object({
+        url: z.string().min(4).max(2000),
+        caption: z.string().max(280).default("")
+      })
+    )
+    .max(20)
+    .default([]),
   publish: z.coerce.boolean().default(false)
 });
 
@@ -182,7 +191,15 @@ async function listingBySlug(slug: string) {
         COALESCE(
           array_agg(lh.body ORDER BY lh.position) FILTER (WHERE lh.body IS NOT NULL),
           ARRAY[]::text[]
-        ) AS highlights
+        ) AS highlights,
+        COALESCE(
+          (
+            SELECT json_agg(json_build_object('url', p.url, 'caption', p.caption) ORDER BY p.position, p.created_at)
+            FROM listing_photos p
+            WHERE p.listing_id = l.id
+          ),
+          '[]'::json
+        ) AS photos
       FROM listings l
       LEFT JOIN listing_highlights lh ON lh.listing_id = l.id
       WHERE l.slug = $1 AND l.published_at IS NOT NULL
@@ -203,7 +220,15 @@ async function adminListingById(id: string) {
         COALESCE(
           array_agg(lh.body ORDER BY lh.position) FILTER (WHERE lh.body IS NOT NULL),
           ARRAY[]::text[]
-        ) AS highlights
+        ) AS highlights,
+        COALESCE(
+          (
+            SELECT json_agg(json_build_object('url', p.url, 'caption', p.caption) ORDER BY p.position, p.created_at)
+            FROM listing_photos p
+            WHERE p.listing_id = l.id
+          ),
+          '[]'::json
+        ) AS photos
       FROM listings l
       LEFT JOIN listing_highlights lh ON lh.listing_id = l.id
       WHERE l.id = $1
@@ -528,7 +553,15 @@ async function registerRoutes(app: FastifyInstance) {
           COALESCE(
             array_agg(lh.body ORDER BY lh.position) FILTER (WHERE lh.body IS NOT NULL),
             ARRAY[]::text[]
-          ) AS highlights
+          ) AS highlights,
+          COALESCE(
+            (
+              SELECT json_agg(json_build_object('url', p.url, 'caption', p.caption) ORDER BY p.position, p.created_at)
+              FROM listing_photos p
+              WHERE p.listing_id = l.id
+            ),
+            '[]'::json
+          ) AS photos
         FROM listings l
         LEFT JOIN listing_highlights lh ON lh.listing_id = l.id
         WHERE ${where.sql}
@@ -982,6 +1015,13 @@ async function registerRoutes(app: FastifyInstance) {
         );
       }
 
+      for (const [index, photo] of body.photos.entries()) {
+        await client.query(
+          "INSERT INTO listing_photos (listing_id, url, caption, position) VALUES ($1, $2, $3, $4)",
+          [listing.rows[0].id, photo.url, photo.caption ?? "", index + 1]
+        );
+      }
+
       return listing.rows[0];
     });
 
@@ -1084,6 +1124,16 @@ async function registerRoutes(app: FastifyInstance) {
           await client.query(
             "INSERT INTO listing_highlights (listing_id, body, position) VALUES ($1, $2, $3)",
             [params.id, highlight, index + 1]
+          );
+        }
+      }
+
+      if (body.photos) {
+        await client.query("DELETE FROM listing_photos WHERE listing_id = $1", [params.id]);
+        for (const [index, photo] of body.photos.entries()) {
+          await client.query(
+            "INSERT INTO listing_photos (listing_id, url, caption, position) VALUES ($1, $2, $3, $4)",
+            [params.id, photo.url, photo.caption ?? "", index + 1]
           );
         }
       }

@@ -19,6 +19,7 @@ export type Listing = {
   longitude?: number | null;
   description?: string;
   highlights: string[];
+  photos?: Array<{ url: string; caption?: string }>;
   publishedAt?: string | null;
   updatedAt?: string;
 };
