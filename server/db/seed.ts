@@ -1,5 +1,44 @@
-import { pool, withTransaction } from "./pool.js";
+import { hashPassword } from "../auth.js";
+import { pool, query, withTransaction } from "./pool.js";
 import { dollarsToCents } from "../serializers.js";
+
+type SeedUser = {
+  email: string;
+  password: string;
+  role: "admin" | "user";
+  displayName: string;
+};
+
+const demoUsers: SeedUser[] = [
+  {
+    email: "admin@farmauction.demo",
+    password: "admin12345",
+    role: "admin",
+    displayName: "Demo Admin"
+  },
+  {
+    email: "bidder@farmauction.demo",
+    password: "bidder12345",
+    role: "user",
+    displayName: "Demo Bidder"
+  }
+];
+
+async function upsertDemoUser(user: SeedUser) {
+  const hash = await hashPassword(user.password);
+  await query(
+    `
+      INSERT INTO users (email, password_hash, role, display_name)
+      VALUES (lower($1), $2, $3, $4)
+      ON CONFLICT (email) DO UPDATE SET
+        password_hash = EXCLUDED.password_hash,
+        role = EXCLUDED.role,
+        display_name = EXCLUDED.display_name,
+        updated_at = now()
+    `,
+    [user.email, hash, user.role, user.displayName]
+  );
+}
 
 type SeedListing = {
   slug: string;
@@ -338,6 +377,12 @@ async function upsertListing(seed: SeedListing) {
 }
 
 async function main() {
+  console.log(`Seeding ${demoUsers.length} demo accounts...`);
+  for (const user of demoUsers) {
+    await upsertDemoUser(user);
+    process.stdout.write(`  · ${user.email} (${user.role})\n`);
+  }
+
   console.log(`Seeding ${listings.length} listings...`);
   for (const listing of listings) {
     await upsertListing(listing);

@@ -6,6 +6,21 @@ import Fastify, {
   type FastifyRequest
 } from "fastify";
 import { ZodError, z } from "zod";
+import {
+  SESSION_COOKIE,
+  attachSessionCookie,
+  clearSessionCookie,
+  createSession,
+  createUser,
+  destroySession,
+  findUserByEmail,
+  getSessionUser,
+  parseCookies,
+  requireAdmin as requireAdminAuth,
+  requireUser,
+  touchLogin,
+  verifyPassword
+} from "./auth.js";
 import { getAuction, getBidHistory, placeBid } from "./auctionService.js";
 import { config } from "./config.js";
 import { pool, query, withTransaction } from "./db/pool.js";
@@ -112,12 +127,17 @@ const bidderApprovalParamSchema = z.object({
   bidderId: z.uuid()
 });
 
-function requireAdmin(request: FastifyRequest) {
-  if (!config.adminApiKey) return;
-  const header = request.headers["x-admin-key"];
-  const key = Array.isArray(header) ? header[0] : header;
-  if (key !== config.adminApiKey) {
-    throw new ApiError(401, "Admin API key is required");
+async function requireAdmin(request: FastifyRequest) {
+  await requireAdminAuth(request);
+}
+
+function assertSameOriginIfBrowserPost(request: FastifyRequest) {
+  const origin = request.headers.origin;
+  if (!origin) return;
+  const value = Array.isArray(origin) ? origin[0] : origin;
+  if (!value) return;
+  if (!config.corsOrigin.includes(value)) {
+    throw new ApiError(403, "Origin is not allowed for this action");
   }
 }
 
@@ -210,7 +230,162 @@ async function loadAuctionForAdmin(id: string) {
   return serializeAuction(result.rows[0]);
 }
 
+const signupBodySchema = z.object({
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+  password: z.string().min(8).max(120),
+  displayName: z.string().max(120).default("")
+});
+
+const loginBodySchema = z.object({
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+  password: z.string().min(1).max(120)
+});
+
 async function registerRoutes(app: FastifyInstance) {
+  app.post("/api/auth/signup", async (request, reply) => {
+    const body = signupBodySchema.parse(request.body);
+    const existing = await findUserByEmail(body.email);
+    if (existing) {
+      throw new ApiError(409, "An account with that email already exists");
+    }
+    const user = await createUser({
+      email: body.email,
+      password: body.password,
+      displayName: body.displayName,
+      role: "user"
+    });
+    const userAgent =
+      (Array.isArray(request.headers["user-agent"])
+        ? request.headers["user-agent"][0]
+        : request.headers["user-agent"]) ?? "";
+    const session = await createSession(user.id, userAgent);
+    attachSessionCookie(reply, session.token, session.expiresAt);
+    await touchLogin(user.id);
+    reply.status(201);
+    return { user };
+  });
+
+  app.post("/api/auth/login", async (request, reply) => {
+    const body = loginBodySchema.parse(request.body);
+    const row = await findUserByEmail(body.email);
+    if (!row) {
+      throw new ApiError(401, "Email or password is incorrect");
+    }
+    const ok = await verifyPassword(body.password, row.password_hash);
+    if (!ok) {
+      throw new ApiError(401, "Email or password is incorrect");
+    }
+    const userAgent =
+      (Array.isArray(request.headers["user-agent"])
+        ? request.headers["user-agent"][0]
+        : request.headers["user-agent"]) ?? "";
+    const session = await createSession(row.id, userAgent);
+    attachSessionCookie(reply, session.token, session.expiresAt);
+    await touchLogin(row.id);
+    return {
+      user: {
+        id: row.id,
+        email: row.email,
+        role: row.role,
+        displayName: row.display_name
+      }
+    };
+  });
+
+  app.post("/api/auth/logout", async (request, reply) => {
+    const cookies = parseCookies(request.headers.cookie);
+    const token = cookies[SESSION_COOKIE];
+    if (token) {
+      await destroySession(token);
+    }
+    clearSessionCookie(reply);
+    reply.status(204);
+    return null;
+  });
+
+  app.get("/api/auth/me", async (request) => {
+    const user = await getSessionUser(request);
+    return { user };
+  });
+
+  app.get("/api/me/summary", async (request) => {
+    const user = await requireUser(request);
+    const bidderRow = await query(
+      `
+        SELECT *
+        FROM bidders
+        WHERE user_id = $1 OR (user_id IS NULL AND lower(email) = lower($2))
+        ORDER BY user_id IS NULL ASC, updated_at DESC
+        LIMIT 1
+      `,
+      [user.id, user.email]
+    );
+    const bidder = bidderRow.rows[0] ?? null;
+
+    if (bidder && !bidder.user_id) {
+      await query("UPDATE bidders SET user_id = $1 WHERE id = $2", [user.id, bidder.id]);
+      bidder.user_id = user.id;
+    }
+
+    const registrations = bidder
+      ? await query(
+          `
+            SELECT
+              aba.*,
+              a.id AS auction_id,
+              a.title AS auction_title,
+              a.status AS auction_status,
+              a.auction_type,
+              a.opens_at,
+              a.closes_at,
+              a.current_high_bid_cents,
+              a.reserve_price_cents,
+              a.reserve_visibility,
+              l.slug AS listing_slug,
+              l.rm AS listing_rm
+            FROM auction_bidder_authorizations aba
+            JOIN auctions a ON a.id = aba.auction_id
+            JOIN listings l ON l.id = a.listing_id
+            WHERE aba.bidder_id = $1
+            ORDER BY a.opens_at DESC
+          `,
+          [bidder.id]
+        )
+      : { rows: [] };
+
+    const bids = bidder
+      ? await query(
+          `
+            SELECT
+              b.id,
+              b.auction_id,
+              b.amount_cents,
+              b.bid_type,
+              b.accepted,
+              b.rejection_reason,
+              b.created_at,
+              a.title AS auction_title,
+              a.status AS auction_status,
+              l.slug AS listing_slug
+            FROM bid_events b
+            JOIN auctions a ON a.id = b.auction_id
+            JOIN listings l ON l.id = a.listing_id
+            WHERE b.bidder_id = $1
+            ORDER BY b.created_at DESC
+            LIMIT 50
+          `,
+          [bidder.id]
+        )
+      : { rows: [] };
+
+    return {
+      user,
+      bidder,
+      registrations: registrations.rows,
+      bids: bids.rows
+    };
+  });
+
   app.get("/api/health", async () => {
     await query("SELECT 1");
     return {
@@ -333,8 +508,10 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/auctions/:id/register", async (request) => {
+    assertSameOriginIfBrowserPost(request);
     const params = idParamSchema.parse(request.params);
     const body = registrationBodySchema.parse(request.body);
+    const sessionUser = await getSessionUser(request);
 
     return withTransaction(async (client) => {
       const auction = await client.query("SELECT id FROM auctions WHERE id = $1", [
@@ -346,9 +523,9 @@ async function registerRoutes(app: FastifyInstance) {
         `
           INSERT INTO bidders (
             email, legal_name, phone, entity_type, mailing_address,
-            identity_document_url, proof_of_funds_url
+            identity_document_url, proof_of_funds_url, user_id
           )
-          VALUES (lower($1), $2, $3, $4, $5, $6, $7)
+          VALUES (lower($1), $2, $3, $4, $5, $6, $7, $8)
           ON CONFLICT (email) DO UPDATE SET
             legal_name = EXCLUDED.legal_name,
             phone = EXCLUDED.phone,
@@ -356,6 +533,7 @@ async function registerRoutes(app: FastifyInstance) {
             mailing_address = EXCLUDED.mailing_address,
             identity_document_url = EXCLUDED.identity_document_url,
             proof_of_funds_url = EXCLUDED.proof_of_funds_url,
+            user_id = COALESCE(EXCLUDED.user_id, bidders.user_id),
             updated_at = now()
           RETURNING id
         `,
@@ -366,7 +544,8 @@ async function registerRoutes(app: FastifyInstance) {
           body.entityType,
           body.mailingAddress,
           body.identityDocumentUrl,
-          body.proofOfFundsUrl
+          body.proofOfFundsUrl,
+          sessionUser?.id ?? null
         ]
       );
 
@@ -434,6 +613,7 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/auctions/:id/bids", async (request, reply) => {
+    assertSameOriginIfBrowserPost(request);
     const params = idParamSchema.parse(request.params);
     const body = bidBodySchema.parse(request.body);
     const result = await placeBid({
@@ -543,7 +723,7 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/admin/dashboard", async (request) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const result = await query(
       `
         SELECT
@@ -558,7 +738,7 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/admin/listings", async (request) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const result = await query(
       `
         SELECT
@@ -580,7 +760,7 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/admin/listings", async (request, reply) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const body = adminListingBodySchema.parse(request.body);
     const result = await withTransaction(async (client) => {
       const listing = await client.query(
@@ -635,7 +815,7 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.put("/api/admin/listings/:id", async (request) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const params = idParamSchema.parse(request.params);
     const body = adminListingUpdateSchema.parse(request.body);
 
@@ -748,7 +928,7 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/admin/auctions", async (request) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const result = await query(
       `
         SELECT
@@ -770,7 +950,7 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/admin/auctions", async (request, reply) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const body = adminAuctionBodySchema.parse(request.body);
     if (body.closesAt <= body.opensAt) {
       throw new ApiError(400, "Auction close time must be after open time");
@@ -824,7 +1004,7 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/admin/auctions/:auctionId/bidders", async (request) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const params = auctionIdParamSchema.parse(request.params);
     const result = await query(
       `
@@ -852,7 +1032,7 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/admin/auctions/:auctionId/bidders/:bidderId/approve", async (request) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const params = bidderApprovalParamSchema.parse(request.params);
     const result = await query(
       `
@@ -871,7 +1051,7 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/admin/auctions/:auctionId/bidders/:bidderId/decision", async (request) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const params = bidderApprovalParamSchema.parse(request.params);
     const body = z
       .object({
@@ -928,7 +1108,7 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/admin/auctions/:auctionId/status", async (request) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const params = auctionIdParamSchema.parse(request.params);
     const body = z
       .object({
@@ -947,7 +1127,7 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/admin/auctions/:auctionId/close", async (request) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const params = auctionIdParamSchema.parse(request.params);
 
     const auctionId = await withTransaction(async (client) => {
@@ -1005,7 +1185,7 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/admin/auctions/:auctionId/tasks", async (request) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const params = auctionIdParamSchema.parse(request.params);
     const result = await query(
       "SELECT * FROM post_auction_tasks WHERE auction_id = $1 ORDER BY created_at ASC",
@@ -1017,7 +1197,7 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/admin/tasks/:id/status", async (request) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const params = taskIdParamSchema.parse(request.params);
     const body = z
       .object({
@@ -1035,7 +1215,7 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/admin/notifications", async (request) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const result = await query(
       "SELECT * FROM notification_outbox ORDER BY created_at DESC LIMIT 100"
     );
@@ -1045,13 +1225,13 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/admin/notifications/:id/send", async (request) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const params = notificationIdParamSchema.parse(request.params);
     return deliverNotification(params.id);
   });
 
   app.get("/api/admin/inquiries", async (request) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const result = await query(
       "SELECT * FROM contact_inquiries ORDER BY created_at DESC LIMIT 100"
     );
@@ -1061,7 +1241,7 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/admin/newsletter-signups", async (request) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const result = await query(
       "SELECT * FROM newsletter_signups ORDER BY consent_at DESC LIMIT 100"
     );
@@ -1071,7 +1251,7 @@ async function registerRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/admin/events", async (request) => {
-    requireAdmin(request);
+    await requireAdmin(request);
     const result = await query(
       "SELECT * FROM auction_events ORDER BY created_at DESC LIMIT 100"
     );
@@ -1087,6 +1267,7 @@ export async function buildServer() {
   });
 
   await app.register(cors, {
+    credentials: true,
     origin: (origin, callback) => {
       if (!origin || config.corsOrigin.includes(origin)) {
         callback(null, true);

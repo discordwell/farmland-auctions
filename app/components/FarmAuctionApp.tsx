@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { type Listing, type ListingStatus } from "../data";
+import { useAuth } from "../lib/useAuth";
 
 const statuses: Array<ListingStatus | "All"> = [
   "All",
@@ -781,6 +782,7 @@ function BidderRegistration({
 }
 
 export function FarmAuctionApp() {
+  const { user, status: authStatus, signOut } = useAuth();
   const [status, setStatus] = useState<Array<ListingStatus | "All">>(["All"]);
   const [region, setRegion] = useState("All");
   const [propertyType, setPropertyType] = useState("All");
@@ -1001,6 +1003,11 @@ export function FarmAuctionApp() {
     return forSale ?? backendListings[0] ?? null;
   }, [backendListings]);
 
+  async function handleSignOut() {
+    await signOut();
+    window.location.assign("/");
+  }
+
   function toggleStatus(nextStatus: ListingStatus | "All") {
     if (nextStatus === "All") {
       setStatus(["All"]);
@@ -1061,6 +1068,41 @@ export function FarmAuctionApp() {
             <a href="#almanac">The Almanac</a>
           </nav>
           <div className="mast-actions">
+            {authStatus === "loading" ? (
+              <span className="auth-chip placeholder" aria-hidden="true">
+                <span className="who">·</span>
+              </span>
+            ) : user ? (
+              <span className="auth-chip" aria-label="Account">
+                <span className="who" title={user.email}>
+                  {user.displayName?.trim() ? user.displayName : user.email}
+                </span>
+                {user.role === "admin" ? (
+                  <a className="auth-link" href="/admin/">
+                    Admin console
+                  </a>
+                ) : null}
+                <a className="auth-link" href="/account/">
+                  My account
+                </a>
+                <button
+                  className="auth-link auth-signout"
+                  type="button"
+                  onClick={handleSignOut}
+                >
+                  Sign out
+                </button>
+              </span>
+            ) : (
+              <span className="auth-chip">
+                <a className="auth-link" href="/login/">
+                  Sign in
+                </a>
+                <a className="auth-link auth-strong" href="/signup/">
+                  Sign up
+                </a>
+              </span>
+            )}
             <a className="btn btn-ghost btn-sm" href="#procurement">
               Bring a file <span className="arrow">→</span>
             </a>

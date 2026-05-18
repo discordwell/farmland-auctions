@@ -12,6 +12,9 @@ function numberFromEnv(name: string, fallback: number) {
 
 export const config = {
   adminApiKey: process.env.ADMIN_API_KEY ?? "",
+  cookieSecure: process.env.COOKIE_SECURE
+    ? process.env.COOKIE_SECURE === "true"
+    : process.env.NODE_ENV === "production",
   corsOrigin: (process.env.CORS_ORIGIN ?? "http://localhost:3000,http://127.0.0.1:3000")
     .split(",")
     .map((origin) => origin.trim())

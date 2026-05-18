@@ -2,6 +2,31 @@
 
 ## Session Summaries
 
+### 2026-05-18 — Auth/login + data model (users, sessions, role-based admin/bidder)
+
+Goal: from `x-admin-key`-only to a real auth system with admin + regular bidder roles for the demo.
+
+1. **Migration 004_auth.sql.** New `users` (email unique, password_hash, role admin|user CHECK, display_name, last_login_at), `user_sessions` (token_hash unique sha256 of opaque base64url 32-byte token, expires_at, last_seen_at, user_agent), and `bidders.user_id` FK with ON DELETE SET NULL.
+
+2. **`server/auth.ts`.** Node-crypto-only password hashing: `scrypt` cost 16384, 16-byte salt, 64-byte key, encoded `scrypt$cost$salt$hash`, `timingSafeEqual` verification with length guard. Opaque session tokens (`randomBytes(32).base64url`), stored only as sha256. Cookie attributes: `HttpOnly; SameSite=Lax; Path=/; Secure=config.cookieSecure`, 14-day TTL. `getSessionUser` reads + touches `last_seen_at` fire-and-forget. `requireAdmin` checks session-role first, then `x-admin-key` fallback for prod scripts; `requireUser` for bidder-only routes.
+
+3. **Auth endpoints** (`server/index.ts`): `POST /api/auth/{signup,login,logout}`, `GET /api/auth/me`. Plus `GET /api/me/summary` returning `{ user, bidder, registrations, bids }` for the bidder dashboard — bidder match scoped `WHERE user_id = $1 OR (user_id IS NULL AND lower(email) = lower($2))` so already-claimed bidder files can't be hijacked across users by an email collision. Auction registration POST now records `bidders.user_id` when a session is present (auto-linking the bidder profile to the logged-in user). Added CORS `credentials: true` and an `assertSameOriginIfBrowserPost` Origin allowlist (against `config.corsOrigin`) on `/api/auctions/:id/{bids,register}` to mitigate CSRF since session cookies are now in play.
+
+4. **Frontend.** Three parallel subagents:
+   - `app/login/page.tsx` + `app/signup/page.tsx` (Almanac §05/§06, paper form + dark aside with seeded demo creds; `?next=` open-redirect guard requires leading `/` and rejects `//`).
+   - `app/account/page.tsx` (§02·c bidder dashboard: profile pill, registrations w/ deposit + max bid, bid ledger with accepted/rejected). Redirects to `/login/?next=/account/` if not authed.
+   - `app/admin/AdminConsole.tsx` rewritten: dropped the `apiKey` textbox + localStorage; redirects to `/login/?next=/admin/` if not authed; shows "Restricted" panel for non-admin role; fetches with `credentials: "include"` (no header).
+   - Shared `app/lib/useAuth.ts` (`useAuth() → { user, status, refresh, signOut }`, `loginRequest`, `signupRequest`).
+   - Masthead in `FarmAuctionApp.tsx`: auth chip with displayName/email + Sign out + My account + (admins) Admin console; "Sign in"/"Sign up" links when logged out; an invisible placeholder during loading to prevent layout shift.
+
+5. **Seed.** `npm run db:seed` now upserts two demo accounts: `admin@farmauction.demo / admin12345` (admin) and `bidder@farmauction.demo / bidder12345` (user) BEFORE seeding listings.
+
+6. **Next dev rewrite.** `next.config.mjs` adds `rewrites()` forwarding `/api/:path*` to `${NEXT_PUBLIC_API_ORIGIN ?? http://127.0.0.1:3510}` so the same-origin cookie story works in dev too; rewrites are dev-only when `output: "export"`, so prod build is unaffected (Caddy proxies `/api/*` at the edge).
+
+Wet-tested end-to-end against dev: anon → masthead shows Sign in/Sign up; admin login → /admin loads with "Signed in · admin@…" header; non-admin → /admin shows "Restricted"; bidder dashboard renders profile + 1 registration + 1 accepted bid after full flow (create auction, register, approve via admin-key fallback, bid). Sign out clears cookie. Code-review subagent caught two issues that were fixed before commit: bidder auto-claim scoped to user_id IS NULL, and same-origin Origin check on the two mutating public POSTs.
+
+Known limitations / future work: session rotation on password reset (not implemented — no reset endpoint exists yet); explicit prod seed should NOT run (`npm run db:seed` would overwrite admin password to the demo value).
+
 ### 2026-05-18 — Production hardening: sample data, copy trim, working links, LOT detail
 
 Goal: take the Almanac demo to a professional auction site. Four work streams:
@@ -30,6 +55,11 @@ Wet-tested at 1440×900 against `npm run dev` on port 3002 (port 3000 was held b
 
 ## Key Findings
 
+- **Auth model:** `users(role admin|user)` + `user_sessions` (opaque token; sha256 stored). Cookie `farmauction_session` HttpOnly, SameSite=Lax, Secure tied to `config.cookieSecure` (default = `NODE_ENV === "production"`). Bidder profiles link to users via `bidders.user_id`, auto-linked on auction registration when a session is present. `requireAdmin` checks session role first, then legacy `x-admin-key` as a server-script fallback. **Do NOT run `npm run db:seed` on prod** — it overwrites the admin password to the demo value (`admin12345`); the seed exists for the demo only.
+- **Same-origin POST guard:** `/api/auctions/:id/{bids,register}` reject browser POSTs whose `Origin` header isn't in `config.corsOrigin`. Server-to-server callers (no Origin header) pass through.
+- **`/api/me/summary` bidder match** is scoped to `user_id = $1 OR (user_id IS NULL AND lower(email) = lower($2))` — already-claimed bidder rows cannot be hijacked across users by an email collision.
+- **Next dev API proxy:** `next.config.mjs` rewrites `/api/:path*` → `${NEXT_PUBLIC_API_ORIGIN ?? http://127.0.0.1:3510}`. This is dev-only with `output: "export"`; prod relies on Caddy to proxy `/api/*` on the same origin.
+- **308 trailing-slash redirect quirk:** Next's `trailingSlash: true` 308-redirects every `POST /api/foo` to `/api/foo/`. Browsers follow 308 with method+body intact, so it works; if you ever swap to a less compliant client, fetch will lose the body.
 - The Next config has `output: "export"` — `/api/*` is proxied at the Caddy layer (production) or hit on a separate Fastify port in dev. The frontend never carries server-side handlers; treat the React tree as a static client over a Fastify backend on PostgreSQL.
 - LOT numbering is derived from the index in the full `backendListings` array, not the filtered docket. Filtering changes which cards are visible, but each lot's number is stable per the listing's position in the full inventory.
 - The Almanac design language reserves **ember red (`#a93826`) exclusively for the LIVE auction state**. Don't reach for it for buttons, alerts, or status pills. Stamps use moss; pending uses wheat; sold uses mute-2; wanted uses soil; lease uses moss.

@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+import { useAuth } from "../lib/useAuth";
+
 type Dashboard = {
   accepted_bid_count: number;
   bidder_count: number;
@@ -128,7 +130,7 @@ function formatDate(value: string) {
 }
 
 export function AdminConsole() {
-  const [apiKey, setApiKey] = useState("");
+  const { user, status: authStatus, signOut } = useAuth();
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [listings, setListings] = useState<AdminListing[]>([]);
   const [auctions, setAuctions] = useState<AdminAuction[]>([]);
@@ -142,14 +144,18 @@ export function AdminConsole() {
   const [selectedAuctionId, setSelectedAuctionId] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
 
+  const isAdmin = authStatus === "ready" && user?.role === "admin";
+
   const selectedAuction = useMemo(
     () => auctions.find((auction) => auction.id === selectedAuctionId) ?? auctions[0],
     [auctions, selectedAuctionId]
   );
 
   useEffect(() => {
-    setApiKey(window.localStorage.getItem("farmauction-admin-key") ?? "");
-  }, []);
+    if (authStatus === "ready" && user === null) {
+      window.location.assign("/login/?next=/admin/");
+    }
+  }, [authStatus, user]);
 
   useEffect(() => {
     if (selectedAuction && !selectedAuctionId) {
@@ -157,12 +163,19 @@ export function AdminConsole() {
     }
   }, [selectedAuction, selectedAuctionId]);
 
+  useEffect(() => {
+    if (!isAdmin) return;
+    void loadAdmin();
+    // loadAdmin is stable for this component; intentional one-shot kickoff on admin auth.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
+
   async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(path, {
       ...init,
+      credentials: "include",
       headers: {
         "content-type": "application/json",
-        "x-admin-key": apiKey,
         ...(init?.headers ?? {})
       }
     });
@@ -174,13 +187,8 @@ export function AdminConsole() {
   }
 
   async function loadAdmin() {
-    if (!apiKey) {
-      setStatus("Admin key required");
-      return;
-    }
     if (isSyncing) return;
 
-    window.localStorage.setItem("farmauction-admin-key", apiKey);
     setIsSyncing(true);
     setStatus("Syncing");
     try {
@@ -356,6 +364,59 @@ export function AdminConsole() {
     { lbl: "Inquiries", val: dashboard?.inquiry_count ?? 0, foot: "Procurement intake" }
   ];
 
+  if (authStatus === "loading") {
+    return (
+      <main className="admin-page">
+        <section className="admin-shell">
+          <div className="admin-head">
+            <h1 className="title">Authorising…</h1>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (user === null) {
+    return (
+      <main className="admin-page">
+        <section className="admin-shell">
+          <div className="admin-head">
+            <h1 className="title">Redirecting…</h1>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <main className="admin-page">
+        <section className="admin-shell">
+          <div className="admin-head">
+            <h1 className="title">Restricted</h1>
+            <p className="lede">
+              This area is restricted to operators. Sign out and use an admin account.
+            </p>
+          </div>
+          <div className="admin-actions" style={{ display: "flex", gap: 12 }}>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                void signOut();
+              }}
+              type="button"
+            >
+              Sign out <span className="arrow">→</span>
+            </button>
+            <a className="btn btn-ghost btn-sm" href="/">
+              Back to site
+            </a>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="admin-page">
       <header className="admin-header">
@@ -367,14 +428,21 @@ export function AdminConsole() {
           </span>
         </a>
         <div className="admin-key">
-          <span>Admin key</span>
-          <input
-            aria-label="Admin API key"
-            onChange={(event) => setApiKey(event.target.value)}
-            placeholder="Paste key"
-            type="password"
-            value={apiKey}
-          />
+          <span>Signed in · {user.email}</span>
+          <a className="btn btn-ghost btn-sm" href="/">
+            Back to site
+          </a>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              void signOut().then(() => {
+                window.location.assign("/");
+              });
+            }}
+            type="button"
+          >
+            Sign out
+          </button>
           <button
             className="btn btn-primary btn-sm"
             onClick={loadAdmin}
@@ -540,7 +608,7 @@ export function AdminConsole() {
                   </div>
                 ))
               ) : (
-                <div className="admin-empty">No listings yet — sync after adding the admin key.</div>
+                <div className="admin-empty">No listings yet — press Sync to refresh.</div>
               )}
             </div>
           </article>
