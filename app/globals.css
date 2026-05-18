@@ -2897,8 +2897,113 @@ footer.colophon {
   font-size: 0.78rem;
   color: var(--mute);
 }
+.detail-head .lld {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: var(--paper-soft);
+  border: var(--hair-soft);
+  border-radius: 2px;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 100%;
+}
+.detail-head .lld .lbl {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.detail-head .lld .val {
+  font-family: var(--mono);
+  font-size: 0.96rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
 .detail-head .lot-status {
   position: static;
+}
+
+.composition {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: var(--hair-soft);
+}
+.composition .lbl {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mute);
+  margin-bottom: 8px;
+}
+.composition-bar {
+  display: flex;
+  width: 100%;
+  height: 14px;
+  border: var(--hair-soft);
+  overflow: hidden;
+  background: var(--paper-soft);
+}
+.composition-segment {
+  min-width: 0;
+  flex-basis: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.45);
+}
+.composition-segment:last-child {
+  border-right: 0;
+}
+.c-cultivated {
+  background: #6b8350;
+}
+.c-pasture {
+  background: #b9893a;
+}
+.c-hayland {
+  background: #c8a64a;
+}
+.c-bush {
+  background: #3d4d36;
+}
+.c-yard {
+  background: #8a6a4a;
+}
+.composition-legend {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.composition-legend li {
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--ink-2);
+}
+.composition-swatch {
+  display: block;
+  width: 14px;
+  height: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+}
+.composition-legend .ll {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--mute);
+  font-size: 0.7rem;
+}
+.composition-legend .ac {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.composition-legend .pct {
+  color: var(--mute);
 }
 
 .detail-grid {
@@ -3163,6 +3268,42 @@ footer.colophon {
   height: 320px;
   border: var(--hair);
   margin-top: 18px;
+}
+
+.gmaps-host {
+  position: relative;
+  margin-top: 24px;
+  border: var(--hair);
+  background: #14201a;
+}
+.gmaps-host iframe {
+  display: block;
+  width: 100%;
+  height: 380px;
+  border: 0;
+}
+.gmaps-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-top: var(--hair-soft);
+  background: var(--paper-soft);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.gmaps-foot .open {
+  color: var(--ink);
+  border-bottom: 1px solid var(--ink);
+  padding-bottom: 1px;
+}
+.gmaps-foot .open:hover {
+  color: var(--prairie);
+  border-bottom-color: var(--prairie);
 }
 
 .leaflet-host .leaflet-container {
@@ -3719,6 +3860,69 @@ footer.colophon {
 }
 .auth-aside-note code {
   color: var(--wheat);
+}
+.auth-demo-list {
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+.auth-demo-btn {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid rgba(239, 231, 211, 0.22);
+  background: rgba(239, 231, 211, 0.04);
+  border-radius: 2px;
+  color: var(--paper);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.auth-demo-btn:hover:not(:disabled),
+.auth-demo-btn:focus-visible:not(:disabled) {
+  border-color: var(--wheat);
+  background: rgba(239, 231, 211, 0.08);
+  outline: none;
+}
+.auth-demo-btn:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+.auth-demo-role {
+  grid-column: 1;
+  grid-row: 1;
+  font-family: var(--display);
+  font-size: 1.18rem;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+}
+.auth-demo-blurb {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  font-family: var(--ui);
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: #c8be9d;
+}
+.auth-demo-cta {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--wheat);
+  white-space: nowrap;
+}
+.auth-demo-cta .arrow {
+  margin-left: 6px;
 }
 .auth-aside-list {
   margin: 16px 0 0;
