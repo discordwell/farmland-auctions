@@ -25,9 +25,11 @@ The API is a Fastify service backed by PostgreSQL.
 ```bash
 docker compose up -d db
 npm run db:migrate
-npm run db:seed
 npm run api:dev
 ```
+
+Create listings, auctions, bidder approvals, and closing tasks from `/admin`.
+The seed command is intentionally a no-op so production deploys do not create public records.
 
 Core API routes:
 

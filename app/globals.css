@@ -31,7 +31,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -75,7 +76,6 @@ main {
 .listing-footer,
 .reserve-row,
 .ledger-title,
-.trust-band div,
 footer,
 .bid-command {
   display: flex;
@@ -130,8 +130,9 @@ footer,
 .chip,
 .bid-command button,
 .contact-form button,
-.media-tabs button,
-.map-pin {
+.newsletter-form button,
+.registration-form button,
+.media-tabs button {
   border: 0;
   cursor: pointer;
 }
@@ -316,7 +317,6 @@ h3 {
 }
 
 .content-band,
-.workflow-band,
 .contact-band {
   padding: clamp(52px, 7vw, 92px) clamp(18px, 4vw, 54px);
 }
@@ -327,6 +327,53 @@ h3 {
   justify-content: space-between;
   gap: 18px;
   margin-bottom: 22px;
+}
+
+.newsletter-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: end;
+}
+
+.newsletter-form input {
+  min-width: min(270px, 100%);
+}
+
+.newsletter-form input,
+.newsletter-form button {
+  min-height: 42px;
+  border-radius: 8px;
+}
+
+.newsletter-form input {
+  padding: 0 12px;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+}
+
+.newsletter-form button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  color: #fff;
+  background: var(--green-dark);
+  font-weight: 800;
+}
+
+.newsletter-form span,
+.error-text {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.newsletter-form .error-text,
+.error-text {
+  color: var(--red);
 }
 
 .tool-row {
@@ -383,6 +430,10 @@ h3 {
 .select-filter select,
 .contact-form select,
 .contact-form input,
+.contact-form textarea,
+.registration-form input,
+.bid-email,
+.range-filter input,
 .bid-command input {
   min-height: 42px;
   color: var(--ink);
@@ -394,6 +445,20 @@ h3 {
 .select-filter select {
   min-width: 170px;
   padding: 0 12px;
+}
+
+.range-filter {
+  display: grid;
+  gap: 6px;
+  min-width: 118px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.range-filter input {
+  width: 100%;
+  padding: 0 10px;
 }
 
 .listing-layout {
@@ -409,11 +474,38 @@ h3 {
   gap: 14px;
 }
 
+.empty-state {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 150px;
+  padding: 18px;
+  color: var(--muted);
+  text-align: center;
+  background: rgba(255, 253, 248, 0.78);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.empty-state strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.empty-state span {
+  max-width: 36ch;
+  line-height: 1.4;
+}
+
+.listing-empty {
+  grid-column: 1 / -1;
+  min-height: 260px;
+}
+
 .listing-card,
 .map-panel,
 .auction-panel,
 .bidder-panel,
-.workflow-card,
 .contact-form {
   background: var(--paper);
   border: 1px solid var(--line);
@@ -447,6 +539,11 @@ h3 {
   color: var(--ink);
   background: rgba(255, 253, 248, 0.92);
   border-radius: 8px;
+}
+
+.media-tabs button.active {
+  color: #fff;
+  background: var(--green-dark);
 }
 
 .status {
@@ -553,6 +650,14 @@ h3 {
     cover;
   background-position: center;
   border-radius: 8px;
+}
+
+.map-empty {
+  position: absolute;
+  inset: 18px;
+  z-index: 2;
+  min-height: auto;
+  background: rgba(255, 253, 248, 0.88);
 }
 
 .map-surface::after {
@@ -677,6 +782,12 @@ h3 {
   font-weight: 800;
 }
 
+.bid-email {
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 0 11px;
+}
+
 .bid-command {
   gap: 8px;
 }
@@ -714,11 +825,23 @@ h3 {
   font-weight: 800;
 }
 
+.form-status.success {
+  color: var(--green-dark);
+}
+
 .bid-ledger {
   display: grid;
   align-content: start;
   gap: 8px;
   min-width: 0;
+}
+
+.panel-empty {
+  margin: 0 18px 18px;
+}
+
+.compact-empty {
+  min-height: 126px;
 }
 
 .ledger-title {
@@ -727,8 +850,7 @@ h3 {
   font-weight: 900;
 }
 
-.ledger-row,
-.approval-row {
+.ledger-row {
   display: grid;
   align-items: center;
   gap: 10px;
@@ -744,87 +866,57 @@ h3 {
 }
 
 .ledger-row span,
-.ledger-row time,
-.approval-row span {
+.ledger-row time {
   color: var(--muted);
   font-size: 0.82rem;
 }
 
-.approval-list {
+.registration-form {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   padding: 0 18px 18px;
 }
 
-.approval-row {
-  grid-template-columns: 1fr auto;
-}
-
-.approval-row strong,
-.approval-row span {
-  display: block;
-}
-
-.approval-row em {
-  color: var(--green-dark);
-  font-size: 0.78rem;
-  font-style: normal;
-  font-weight: 900;
-}
-
-.workflow-grid {
+.registration-form label {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
 }
 
-.workflow-card {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 14px;
-  padding: 18px;
+.registration-form input {
+  width: 100%;
+  padding: 0 11px;
 }
 
-.workflow-icon {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
+.registration-form button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 14px;
   color: #fff;
   background: var(--green-dark);
   border-radius: 8px;
+  font-weight: 800;
 }
 
-.workflow-card span {
-  color: var(--amber);
-  font-size: 0.75rem;
-  font-weight: 900;
+.registration-form button:disabled {
+  cursor: progress;
+  opacity: 0.72;
 }
 
-.workflow-card p {
-  margin: 8px 0 0;
-  color: var(--muted);
-  line-height: 1.45;
-}
-
-.trust-band {
-  display: grid;
-  grid-template-columns: minmax(240px, 0.34fr) minmax(0, 1fr);
-  gap: 24px;
+.check-row {
+  display: flex !important;
   align-items: center;
-  padding: 30px clamp(18px, 4vw, 54px);
-  color: #fff;
-  background: #1f2c24;
+  gap: 8px;
 }
 
-.trust-band div {
-  gap: 12px;
-}
-
-.trust-band p {
-  margin-bottom: 0;
-  color: #dfe7dc;
-  line-height: 1.6;
+.check-row input {
+  width: 18px;
+  min-height: 18px;
 }
 
 .contact-band {
@@ -859,9 +951,20 @@ h3 {
 }
 
 .contact-form input,
-.contact-form select {
+.contact-form select,
+.contact-form textarea {
   width: 100%;
   padding: 0 12px;
+}
+
+.contact-form textarea {
+  min-height: 112px;
+  padding-top: 11px;
+  resize: vertical;
+}
+
+.full-field {
+  grid-column: 1 / -1;
 }
 
 footer {
@@ -1145,10 +1248,6 @@ footer a {
     min-height: 360px;
   }
 
-  .workflow-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .admin-grid,
   .admin-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1185,8 +1284,7 @@ footer a {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .auction-grid,
-  .trust-band {
+  .auction-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -1204,7 +1302,6 @@ footer a {
   .hero-shell,
   .content-band,
   .auction-band,
-  .workflow-band,
   .contact-band {
     padding-inline: 14px;
   }
@@ -1223,8 +1320,7 @@ footer a {
   }
 
   .signal-strip,
-  .listing-grid,
-  .workflow-grid {
+  .listing-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1232,6 +1328,15 @@ footer a {
   .tool-row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .newsletter-form {
+    justify-content: stretch;
+  }
+
+  .newsletter-form input,
+  .newsletter-form button {
+    width: 100%;
   }
 
   .filter-group {
@@ -1247,7 +1352,8 @@ footer a {
     flex-direction: column;
   }
 
-  .select-filter select {
+  .select-filter select,
+  .range-filter {
     width: 100%;
   }
 
