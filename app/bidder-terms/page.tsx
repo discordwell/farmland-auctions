@@ -41,7 +41,7 @@ export default function BidderTermsPage() {
           </div>
         </div>
         <p className="terms-intro">
-          Auction-specific bidder packages, seller instructions, and signed agreements control where they differ from this page. The Almanac is the public statement; the signed package is the binding one.
+          Auction-specific bidder packages, seller instructions, and signed agreements control where they differ from this page.
         </p>
         <div className="terms-list">
           {sections.map((section, idx) => (

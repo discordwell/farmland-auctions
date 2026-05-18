@@ -373,7 +373,12 @@ function AuctionPanel({
             })} CST
           </span>
           <h2 id="auction-h">{auction.title}</h2>
-          <div className="legal">Approved bidders only · Anti-snipe rule in effect</div>
+          <div className="legal">
+            Approved bidders only
+            {auction.softCloseSeconds && auction.softCloseSeconds > 0
+              ? ` · Soft-close ${auction.softCloseSeconds}s`
+              : ""}
+          </div>
         </div>
         <Countdown closesAt={auction.closesAt} />
       </header>
@@ -952,7 +957,7 @@ export function FarmAuctionApp() {
       });
       if (!response.ok) throw new Error("Newsletter signup failed");
       setNewsletterEmail("");
-      setNewsletterStatus("Subscribed. Next edition lands Monday.");
+      setNewsletterStatus("Subscribed. We'll email when something opens.");
     } catch {
       setNewsletterError("Signup is unavailable.");
     }

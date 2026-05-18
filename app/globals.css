@@ -244,6 +244,8 @@ main {
   transform: translateY(-4px);
 }
 .wordmark .lockup {
+  display: flex;
+  flex-direction: column;
   line-height: 0.9;
 }
 .wordmark .lockup .name {
@@ -2442,7 +2444,7 @@ footer.colophon {
   top: 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr;
   align-items: center;
   gap: 24px;
   padding: 14px clamp(18px, 4vw, 56px);

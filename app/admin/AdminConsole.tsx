@@ -363,14 +363,9 @@ export function AdminConsole() {
           <span className="mark">W</span>
           <span className="lockup">
             <span className="name">Wyatt</span>
-            <span className="sub">Operator console · Internal</span>
+            <span className="sub">Operator console</span>
           </span>
         </a>
-        <div className="edition" style={{ background: "transparent", color: "var(--ink)", padding: 0, gridTemplateColumns: "1fr", justifyContent: "center" }}>
-          <div className="center" style={{ color: "var(--mute)" }}>
-            <span>§ Operator console · Regina, SK · Treaty 4</span>
-          </div>
-        </div>
         <div className="admin-key">
           <span>Admin key</span>
           <input
@@ -395,10 +390,10 @@ export function AdminConsole() {
         <div className="admin-head">
           <span className="sign">§00 &nbsp; Brokerage command</span>
           <h1 className="title">
-            Operator <em>console</em> — the working desk behind the bell.
+            Operator <em>console.</em>
           </h1>
           <p className="lede">
-            Listings, live auctions, bidder approvals, and post-close workflow. Every action writes to the audit ledger.
+            Listings, live auctions, bidder approvals, post-close. Every action writes to the audit ledger.
           </p>
         </div>
 
