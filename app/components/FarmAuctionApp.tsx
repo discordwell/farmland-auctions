@@ -130,8 +130,6 @@ function CompassRose() {
 }
 
 function LotCard({ listing, lotIndex }: { listing: Listing; lotIndex: number }) {
-  const [mediaMode, setMediaMode] = useState<"photo" | "satellite">("photo");
-  const imageSrc = mediaMode === "photo" ? listing.image : listing.satellite;
   const lotNo = formatLotNumber(lotIndex);
   const statusKey = statusSlug(listing.status);
   const soilGap = Math.max(0, Math.min(100, 100 - listing.soilRating));
@@ -140,7 +138,7 @@ function LotCard({ listing, lotIndex }: { listing: Listing; lotIndex: number }) 
   return (
     <article className="lot">
       <div className="lot-media">
-        <img src={imageSrc} alt={`Lot ${lotNo} — ${listing.title} (${mediaMode})`} />
+        <img src={listing.image} alt={`Lot ${lotNo} — ${listing.title}`} />
         <span className="lot-no">
           Lot <span className="num">{lotNo}</span>
         </span>
@@ -148,22 +146,6 @@ function LotCard({ listing, lotIndex }: { listing: Listing; lotIndex: number }) 
           <span className="swatch"></span>
           {listing.status}
         </span>
-        <div className="media-toggle" aria-label="Lot media">
-          <button
-            className={mediaMode === "photo" ? "on" : ""}
-            type="button"
-            onClick={() => setMediaMode("photo")}
-          >
-            Photo
-          </button>
-          <button
-            className={mediaMode === "satellite" ? "on" : ""}
-            type="button"
-            onClick={() => setMediaMode("satellite")}
-          >
-            Satellite
-          </button>
-        </div>
       </div>
       <div className="lot-head">
         <div>
@@ -524,14 +506,11 @@ function RmMap({
     <aside className="map-card" aria-labelledby="map-title">
       <div className="map-head">
         <div>
-          <div className="lbl">Plate I</div>
-          <h2 id="map-title">RM map · open files</h2>
+          <h2 id="map-title">RM map</h2>
         </div>
         <div className="scale">
           <strong>Saskatchewan</strong>
-          Range 1–30 W3
-          <br />
-          Twp 1 — 56
+          {pins.length} located
         </div>
       </div>
       <div className="map-surface">
@@ -555,9 +534,8 @@ function RmMap({
         )}
         <div className="map-title">
           <div>
-            <div className="coords">Plate I · Province of Saskatchewan</div>
             <div className="name">
-              <em>Open files,</em> rural municipalities
+              <em>Open files</em>
             </div>
           </div>
           <div className="bar">
@@ -668,7 +646,7 @@ function BidderRegistration({
     return (
       <aside className="register">
         <header className="register-head">
-          <span className="pre">§02·b &nbsp; Bidder portal</span>
+          <span className="pre">Bidder portal</span>
           <h3>Apply to bid</h3>
         </header>
         <div className="register-empty">
@@ -1108,7 +1086,6 @@ export function FarmAuctionApp() {
               <strong>Cameron Wyatt</strong>
               <span className="trail">Saskatchewan REALTOR®</span>
             </div>
-            <span className="sign">Regina · Treaty 4</span>
           </div>
           <div>
             <h1 className="display">
@@ -1341,32 +1318,41 @@ export function FarmAuctionApp() {
         </div>
       </section>
 
-      <section className="band floor" id="floor">
-        <div className="sec-head">
-          <span className="sign">§02 &nbsp; The auction floor</span>
-          <h2 className="title">
-            A reserve, a bell, an <em>open ledger.</em>
-          </h2>
-          <p className="lede">
-            Approved bidders only. Reserve is published before the bell. Every accepted bid is timestamped to the ledger.
+      {liveAuction || isAuctionLoading ? (
+        <section className="band floor" id="floor">
+          <div className="sec-head">
+            <span className="sign">§02 &nbsp; The auction floor</span>
+            <h2 className="title">
+              A reserve, a bell, an <em>open ledger.</em>
+            </h2>
+            <p className="lede">
+              Approved bidders only. Reserve is published before the bell. Every accepted bid is timestamped to the ledger.
+            </p>
+          </div>
+          <div className="floor-grid">
+            <AuctionPanel
+              auction={liveAuction}
+              bids={liveBids}
+              bidderEmail={bidderEmail}
+              isLoading={isAuctionLoading}
+              onBidderEmailChange={setBidderEmail}
+              onBidAccepted={handleBidAccepted}
+            />
+            <BidderRegistration
+              auction={liveAuction}
+              bidderEmail={bidderEmail}
+              onBidderEmailChange={setBidderEmail}
+            />
+          </div>
+        </section>
+      ) : (
+        <section className="floor-quiet" id="floor">
+          <span className="sign">§02 &nbsp; Auctions</span>
+          <p>
+            No auction on the floor. <a href="#procurement">Bring a file →</a>
           </p>
-        </div>
-        <div className="floor-grid">
-          <AuctionPanel
-            auction={liveAuction}
-            bids={liveBids}
-            bidderEmail={bidderEmail}
-            isLoading={isAuctionLoading}
-            onBidderEmailChange={setBidderEmail}
-            onBidAccepted={handleBidAccepted}
-          />
-          <BidderRegistration
-            auction={liveAuction}
-            bidderEmail={bidderEmail}
-            onBidderEmailChange={setBidderEmail}
-          />
-        </div>
-      </section>
+        </section>
+      )}
 
       <section className="band" id="procurement">
         <div className="sec-head">
@@ -1379,14 +1365,10 @@ export function FarmAuctionApp() {
           </p>
         </div>
         <div className="procurement">
-          <div className="agent-card">
-            <div className="agent-portrait" aria-label="Cameron Wyatt portrait"></div>
+          <aside className="agent-card">
             <div className="agent-meta">
-              <span className="pre">The operator</span>
               <span className="name">Cameron Wyatt</span>
-              <span className="role">
-                — Saskatchewan REALTOR® &amp; principal, Wyatt Realty Group
-              </span>
+              <span className="role">Saskatchewan REALTOR® · Wyatt Realty Group</span>
               <div className="creds">
                 <div>
                   <span className="lbl">Email</span>
@@ -1394,14 +1376,13 @@ export function FarmAuctionApp() {
                 </div>
                 <div>
                   <span className="lbl">Based</span>
-                  <span>Regina · Treaty 4 · province-wide</span>
+                  <span>Regina · province-wide</span>
                 </div>
               </div>
             </div>
-          </div>
+          </aside>
 
           <div className="contact-block">
-            <p className="pre">§03·a &nbsp; The brief</p>
             <h2>
               Tell us what you have, or <em>what you want.</em>
             </h2>
@@ -1531,11 +1512,10 @@ export function FarmAuctionApp() {
           </div>
         </div>
         <div className="colo-bottom">
-          <div>© {new Date().getFullYear()} Wyatt Farmland Auctions Inc. · Regina · SK</div>
-          <div className="center">
-            — <em>Operator-led. Built to last.</em> —
+          <div>© {new Date().getFullYear()} Wyatt Realty Group · Regina, SK</div>
+          <div className="right">
+            <a href="mailto:cameron@wyattrealty.ca">cameron@wyattrealty.ca</a>
           </div>
-          <div className="right">Set in Newsreader, IBM Plex Sans &amp; Mono</div>
         </div>
       </footer>
     </main>

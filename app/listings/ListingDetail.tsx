@@ -16,18 +16,15 @@ function statusSlug(status: string) {
 }
 
 export function ListingDetail() {
-  const [slug, setSlug] = useState<string>("");
   const [listing, setListing] = useState<Listing | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [mediaMode, setMediaMode] = useState<"photo" | "satellite">("photo");
   const [inquiryStatus, setInquiryStatus] = useState("");
   const [inquiryError, setInquiryError] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const next = params.get("slug") ?? "";
-    setSlug(next);
     if (!next) {
       setIsLoading(false);
       setError("No lot specified");
@@ -159,26 +156,7 @@ export function ListingDetail() {
 
             <div className="detail-grid">
               <div className="detail-media">
-                <img
-                  src={mediaMode === "photo" ? listing.image : listing.satellite}
-                  alt={`${listing.title} ${mediaMode} view`}
-                />
-                <div className="media-toggle">
-                  <button
-                    type="button"
-                    className={mediaMode === "photo" ? "on" : ""}
-                    onClick={() => setMediaMode("photo")}
-                  >
-                    Photo
-                  </button>
-                  <button
-                    type="button"
-                    className={mediaMode === "satellite" ? "on" : ""}
-                    onClick={() => setMediaMode("satellite")}
-                  >
-                    Satellite
-                  </button>
-                </div>
+                <img src={listing.image} alt={listing.title} />
               </div>
 
               <aside className="detail-side">

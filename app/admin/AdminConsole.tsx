@@ -388,10 +388,7 @@ export function AdminConsole() {
 
       <section className="admin-shell">
         <div className="admin-head">
-          <span className="sign">§00 &nbsp; Brokerage command</span>
-          <h1 className="title">
-            Operator <em>console.</em>
-          </h1>
+          <h1 className="title">Operator console</h1>
           <p className="lede">
             Listings, live auctions, bidder approvals, post-close. Every action writes to the audit ledger.
           </p>
@@ -417,7 +414,7 @@ export function AdminConsole() {
           <article className="admin-panel">
             <div className="admin-panel-head">
               <div>
-                <p className="pre">§A · Inventory CMS</p>
+                <p className="pre">Inventory</p>
                 <h2>
                   Create <em>listing</em>
                 </h2>
@@ -465,7 +462,7 @@ export function AdminConsole() {
           <article className="admin-panel">
             <div className="admin-panel-head">
               <div>
-                <p className="pre">§B · Auction control</p>
+                <p className="pre">Auctions</p>
                 <h2>
                   Create <em>auction</em>
                 </h2>
@@ -524,7 +521,7 @@ export function AdminConsole() {
           <article className="admin-panel">
             <div className="admin-panel-head">
               <div>
-                <p className="pre">§C · Inventory</p>
+                <p className="pre">On the book</p>
                 <h2>The book</h2>
               </div>
               <span className="ornament">{listings.length} files</span>
@@ -551,7 +548,7 @@ export function AdminConsole() {
           <article className="admin-panel">
             <div className="admin-panel-head">
               <div>
-                <p className="pre">§D · Live files</p>
+                <p className="pre">Open auctions</p>
                 <h2>Auctions</h2>
               </div>
               <span className="ornament">{auctions.length} on roll</span>
@@ -604,7 +601,7 @@ export function AdminConsole() {
           <article className="admin-panel">
             <div className="admin-panel-head">
               <div>
-                <p className="pre">§E · Bidder approvals</p>
+                <p className="pre">Bidder approvals</p>
                 <h2>
                   Authorization <em>queue</em>
                 </h2>
@@ -705,7 +702,7 @@ export function AdminConsole() {
           <article className="admin-panel">
             <div className="admin-panel-head">
               <div>
-                <p className="pre">§F · Leads</p>
+                <p className="pre">Inquiries</p>
                 <h2>Inquiries</h2>
               </div>
               <span className="ornament">{inquiries.length} on file</span>
@@ -734,7 +731,7 @@ export function AdminConsole() {
           <article className="admin-panel">
             <div className="admin-panel-head">
               <div>
-                <p className="pre">§G · Close workflow</p>
+                <p className="pre">Post-auction tasks</p>
                 <h2>
                   Post-auction <em>tasks</em>
                 </h2>
@@ -781,7 +778,7 @@ export function AdminConsole() {
           <article className="admin-panel">
             <div className="admin-panel-head">
               <div>
-                <p className="pre">§H · Outbox</p>
+                <p className="pre">Notifications</p>
                 <h2>Notifications</h2>
               </div>
               <span className="ornament">{notifications.length} queued</span>
@@ -818,7 +815,7 @@ export function AdminConsole() {
           <article className="admin-panel">
             <div className="admin-panel-head">
               <div>
-                <p className="pre">§I · Newsletter</p>
+                <p className="pre">Newsletter</p>
                 <h2>Consent log</h2>
               </div>
               <span className="ornament">{signups.length} subscribers</span>
@@ -843,7 +840,7 @@ export function AdminConsole() {
           <article className="admin-panel">
             <div className="admin-panel-head">
               <div>
-                <p className="pre">§J · Audit</p>
+                <p className="pre">Audit ledger</p>
                 <h2>
                   Event <em>ledger</em>
                 </h2>

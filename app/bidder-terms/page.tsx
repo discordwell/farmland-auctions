@@ -34,7 +34,7 @@ export default function BidderTermsPage() {
         </a>
         <div className="terms-head">
           <div>
-            <p className="pre">§04 &nbsp; Bidder terms</p>
+            <p className="pre">Bidder terms</p>
             <h1>
               Terms of the <em>bell.</em>
             </h1>
@@ -46,7 +46,7 @@ export default function BidderTermsPage() {
         <div className="terms-list">
           {sections.map((section, idx) => (
             <article key={section.title}>
-              <div className="num">§04·{String(idx + 1).padStart(2, "0")}</div>
+              <div className="num">{String(idx + 1).padStart(2, "0")}</div>
               <div>
                 <h2>{section.title}</h2>
                 <p>{section.body}</p>
