@@ -2800,6 +2800,200 @@ footer.colophon {
 }
 
 /* =========================================================
+   14b. LOT DETAIL PAGE
+   ========================================================= */
+
+.detail {
+  display: grid;
+  gap: 32px;
+}
+
+.detail-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 18px;
+  padding-bottom: 18px;
+  border-bottom: var(--hair);
+}
+.detail-head .rm {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.detail-head .title {
+  margin: 6px 0 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: clamp(2.2rem, 4vw, 3.6rem);
+  line-height: 0.96;
+  letter-spacing: -0.018em;
+  color: var(--ink);
+  max-width: 22ch;
+}
+.detail-head .title em {
+  font-style: italic;
+  color: var(--prairie);
+}
+.detail-head .legal {
+  margin-top: 10px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--mute);
+}
+.detail-head .lot-status {
+  position: static;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.detail-media {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: #2a2519;
+  border: var(--hair);
+}
+.detail-media img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: contrast(1.04) saturate(0.92);
+}
+.detail-media .media-toggle {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: inline-flex;
+  background: rgba(239, 231, 211, 0.92);
+  border: var(--hair-soft);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  z-index: 2;
+}
+.detail-media .media-toggle button {
+  background: transparent;
+  border: 0;
+  padding: 8px 12px;
+  border-right: var(--hair-soft);
+  color: var(--ink);
+  cursor: pointer;
+}
+.detail-media .media-toggle button:last-child {
+  border-right: 0;
+}
+.detail-media .media-toggle button.on {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.detail-side {
+  border: var(--hair);
+  background: var(--paper-soft);
+  padding: 18px;
+  display: grid;
+  gap: 18px;
+}
+.detail-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  margin: 0;
+  border-top: var(--hair-soft);
+}
+.detail-stats > div {
+  padding: 12px 14px 12px 0;
+  border-bottom: var(--hair-soft);
+}
+.detail-stats > div:nth-child(odd) {
+  border-right: var(--hair-soft);
+}
+.detail-stats > div:nth-child(odd) {
+  padding-right: 14px;
+}
+.detail-stats > div:nth-child(even) {
+  padding-left: 14px;
+}
+.detail-stats dt {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.detail-stats dd {
+  margin: 4px 0 0;
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-highlights .lbl {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.detail-highlights ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0;
+  border-top: var(--hair-soft);
+}
+.detail-highlights li {
+  padding: 8px 0;
+  border-bottom: var(--hair-soft);
+  font-family: var(--serif);
+  font-size: 1rem;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+.detail-description {
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+  max-width: 64ch;
+  margin: 0;
+}
+
+.detail-inquiry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 1.2fr);
+  gap: 36px;
+  align-items: start;
+  padding-top: 32px;
+  border-top: var(--hair);
+}
+.detail-inquiry h2 {
+  margin: 6px 0 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  line-height: 1;
+  letter-spacing: -0.014em;
+  color: var(--ink);
+  max-width: 16ch;
+}
+
+/* =========================================================
    15. UTILITY / HEALTH
    ========================================================= */
 
@@ -2858,6 +3052,10 @@ footer.colophon {
     border-bottom: var(--hair-soft);
   }
   .procurement {
+    grid-template-columns: 1fr;
+  }
+  .detail-grid,
+  .detail-inquiry {
     grid-template-columns: 1fr;
   }
   .colo-grid {

@@ -49,6 +49,7 @@ type ApiAuction = {
   closesAt: string;
   bidIncrementCents: number;
   reserveMet: boolean;
+  softCloseSeconds?: number;
   currentHighBidCents: number;
   currentHighBidDollars: number;
 };
@@ -198,9 +199,19 @@ function LotCard({ listing, lotIndex }: { listing: Listing; lotIndex: number }) 
       </div>
       <div className="lot-foot">
         <span className="type">{listing.region}</span>
-        <a className="view" href="#floor">
-          {listing.status === "Sold" ? "Closing record →" : isWanted ? "Submit a file →" : "View file →"}
-        </a>
+        {isWanted ? (
+          <a className="view" href="#procurement">
+            Submit a file →
+          </a>
+        ) : listing.slug ? (
+          <a className="view" href={`/listings/?slug=${encodeURIComponent(listing.slug)}`}>
+            {listing.status === "Sold" ? "Closing record →" : "View file →"}
+          </a>
+        ) : (
+          <a className="view" href="#procurement">
+            Inquire →
+          </a>
+        )}
       </div>
     </article>
   );
@@ -430,7 +441,12 @@ function AuctionPanel({
               </div>
             </div>
             <div className="hint">
-              Minimum next bid: <strong>{cad.format(minNext)}</strong>. Bids accepted within the final 90 s extend the bell by 90 s. <strong>Anti-snipe rule in effect.</strong>
+              Minimum next bid: <strong>{cad.format(minNext)}</strong>.
+              {auction.softCloseSeconds && auction.softCloseSeconds > 0 ? (
+                <>
+                  {" "}Bids in the final {auction.softCloseSeconds} s extend the bell by {auction.softCloseSeconds} s.
+                </>
+              ) : null}
             </div>
             {bidError ? <p className="form-status">{bidError}</p> : null}
           </form>
@@ -768,7 +784,7 @@ function BidderRegistration({
             required
           />
           <span>
-            I accept the <a href="/bidder-terms/">bidder terms</a> for this floor — including 10% deposit on bell, 30-day close, and anti-snipe extension.
+            I accept the <a href="/bidder-terms/">bidder terms</a> for this floor.
           </span>
         </label>
         <button className="submit" type="submit" disabled={isSubmitting}>
@@ -873,6 +889,21 @@ export function FarmAuctionApp() {
     });
   }
 
+  useEffect(() => {
+    function applyHashFilter() {
+      const hash = window.location.hash;
+      const match = /status=([^&]+)/i.exec(hash);
+      if (!match) return;
+      const raw = decodeURIComponent(match[1]);
+      const allowed: ListingStatus[] = ["For Sale", "Pending", "Sold", "Wanted", "Lease"];
+      const matched = allowed.find((s) => s.toLowerCase() === raw.toLowerCase());
+      if (matched) setStatus([matched]);
+    }
+    applyHashFilter();
+    window.addEventListener("hashchange", applyHashFilter);
+    return () => window.removeEventListener("hashchange", applyHashFilter);
+  }, []);
+
   async function submitContact(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -975,19 +1006,17 @@ export function FarmAuctionApp() {
     return Math.round(priced.reduce((sum, listing) => sum + listing.pricePerAcre, 0) / priced.length);
   }, [backendListings]);
 
-  const editionVolume = useMemo(() => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), 0, 1);
-    const week = Math.ceil(((now.getTime() - start.getTime()) / 86_400_000 + start.getDay() + 1) / 7);
-    return `Vol. ${now.getFullYear() - 2025} · No. ${week}`;
-  }, []);
-
   const highBidCurrent = Math.max(
     liveAuction?.currentHighBidDollars ?? 0,
     liveBids[0]?.amount ?? 0
   );
   const secsRemaining = secondsUntil(liveAuction?.closesAt);
   const minsRemaining = Math.floor(secsRemaining / 60);
+
+  const featuredListing = useMemo(() => {
+    const forSale = backendListings.find((l) => l.status === "For Sale");
+    return forSale ?? backendListings[0] ?? null;
+  }, [backendListings]);
 
   function toggleStatus(nextStatus: ListingStatus | "All") {
     if (nextStatus === "All") {
@@ -1005,29 +1034,29 @@ export function FarmAuctionApp() {
     <main>
       <div className="edition">
         <div className="left">
-          <span>{editionVolume}</span>
-          <span>Week of {EDITION_DATE}</span>
           <span>Regina, SK · Treaty 4</span>
         </div>
         <div className="center">
           {liveAuction && liveAuction.status === "open" ? (
             <span className="live-tag">
               <span className="dot"></span>
-              Auction floor open · {liveAuction.title} closes in {minsRemaining} min
+              Live · {liveAuction.title} · closes in {minsRemaining} min
             </span>
           ) : (
-            <span>Auction floor · Next bell announced weekly</span>
+            <span>Saskatchewan farmland · Wyatt Realty Group</span>
           )}
         </div>
         <div className="right">
           {spotPricePerAcre > 0 ? (
             <span>
-              Spot $/Ac. <strong>{number.format(spotPricePerAcre)}</strong>
+              Avg $/ac <strong>{number.format(spotPricePerAcre)}</strong>
             </span>
           ) : null}
-          <span>
-            Acres listed <strong>{number.format(Math.round(totalAcres))}</strong>
-          </span>
+          {totalAcres > 0 ? (
+            <span>
+              Acres listed <strong>{number.format(Math.round(totalAcres))}</strong>
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -1037,7 +1066,7 @@ export function FarmAuctionApp() {
             <span className="mark">W</span>
             <span className="lockup">
               <span className="name">Wyatt</span>
-              <span className="sub">Farmland Auctions · Est. 2019</span>
+              <span className="sub">Farmland Auctions</span>
             </span>
           </a>
           <nav className={mobileNav ? "navlinks open" : "navlinks"} aria-label="Primary">
@@ -1071,11 +1100,10 @@ export function FarmAuctionApp() {
         <div className="hero-text">
           <div className="hero-meta">
             <div className="byline">
-              <span>Filed by</span>
               <strong>Cameron Wyatt</strong>
-              <span className="trail">— Saskatchewan REALTOR®</span>
+              <span className="trail">Saskatchewan REALTOR®</span>
             </div>
-            <span className="sign">N&nbsp;52°&nbsp;9&apos;&nbsp;&nbsp;W&nbsp;106°&nbsp;38&apos;</span>
+            <span className="sign">Regina · Treaty 4</span>
           </div>
           <div>
             <h1 className="display">
@@ -1086,7 +1114,7 @@ export function FarmAuctionApp() {
               <span style={{ fontStyle: "italic", fontWeight: 500 }}>Bid by bid.</span>
             </h1>
             <p className="hero-lede">
-              Saskatchewan farmland — listings, leases, and live auctions managed by Wyatt Realty Group. Every quarter section is catalogued, surveyed, and brought to the floor with a published reserve.
+              Saskatchewan farmland — listings, leases, and live auctions.
             </p>
           </div>
           <div className="hero-actions">
@@ -1097,11 +1125,11 @@ export function FarmAuctionApp() {
             <a className="btn btn-ghost" href="#inventory">
               Browse the inventory
             </a>
-            <span className="meta">
-              {liveAuction && liveAuction.status === "open"
-                ? `Next bell · ${new Date(liveAuction.closesAt).toLocaleTimeString("en-CA", { hour: "2-digit", minute: "2-digit", hour12: false })} CST`
-                : "Next bell · announced weekly"}
-            </span>
+            {liveAuction && liveAuction.status === "open" ? (
+              <span className="meta">
+                Bell · {new Date(liveAuction.closesAt).toLocaleTimeString("en-CA", { hour: "2-digit", minute: "2-digit", hour12: false })} CST
+              </span>
+            ) : null}
           </div>
         </div>
         <div className="hero-photo">
@@ -1111,56 +1139,85 @@ export function FarmAuctionApp() {
               <span className="dot"></span>Live · {liveAuction.title}
             </span>
           ) : null}
-          <div className="caption">
-            <div className="kicker">
-              {liveAuction ? `Featured lot · ${liveAuction.title}` : "Featured edition · Vol. 1"}
-            </div>
-            <div className="title">
-              North Lipton, <em>a half-section of brown chernozem.</em>
-            </div>
-            <div className="rule"></div>
-            <div className="row">
-              <div>
-                <div className="lbl">Acres</div>
-                <div className="val">{number.format(Math.round(totalAcres))}</div>
+          {liveAuction || featuredListing ? (
+            <div className="caption">
+              <div className="kicker">
+                {liveAuction
+                  ? `Live · ${liveAuction.title}`
+                  : `Featured · ${featuredListing!.rm}`}
               </div>
-              <div>
-                <div className="lbl">Reserve</div>
-                <div className="val">{liveAuction?.reserveMet ? "Met" : "Open"}</div>
+              <div className="title">
+                {liveAuction ? (
+                  <em>Open ledger.</em>
+                ) : (
+                  <>
+                    {featuredListing!.title.split(" ").slice(0, -1).join(" ")}{" "}
+                    <em>{featuredListing!.title.split(" ").slice(-1)[0]}.</em>
+                  </>
+                )}
               </div>
-              <div>
-                <div className="lbl">High bid</div>
-                <div className="val">{highBidCurrent > 0 ? cad.format(highBidCurrent) : "—"}</div>
+              <div className="rule"></div>
+              <div className="row">
+                <div>
+                  <div className="lbl">Acres</div>
+                  <div className="val">
+                    {number.format(
+                      liveAuction
+                        ? Math.round(totalAcres)
+                        : Math.round(featuredListing!.acres)
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="lbl">{liveAuction ? "Reserve" : "$/ac"}</div>
+                  <div className="val">
+                    {liveAuction
+                      ? liveAuction.reserveMet
+                        ? "Met"
+                        : "Open"
+                      : cad.format(featuredListing!.pricePerAcre)}
+                  </div>
+                </div>
+                <div>
+                  <div className="lbl">{liveAuction ? "High bid" : "Status"}</div>
+                  <div className="val">
+                    {liveAuction
+                      ? highBidCurrent > 0
+                        ? cad.format(highBidCurrent)
+                        : "—"
+                      : featuredListing!.status}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          ) : null}
         </div>
       </section>
 
-      <div className="stat-rail" aria-label="Now trading">
+      <div className="stat-rail" aria-label="Inventory at a glance">
         <div className="cell">
           <div className="lbl">
-            Published lots <span className="pip">§</span>
+            Listings <span className="pip">§</span>
           </div>
           <div className="val figure">
             {number.format(backendListings.length)}
             <span className="unit">on book</span>
           </div>
-          <div className="foot up">▲ {backendListings.length} catalogued this edition</div>
+          <div className="foot">{statusCounts["For Sale"] ?? 0} for sale</div>
         </div>
         <div className="cell">
           <div className="lbl">
-            Acres on offer <span className="pip">§</span>
+            Acres <span className="pip">§</span>
           </div>
           <div className="val figure">
             {number.format(Math.round(totalAcres))}
             <span className="unit">ac.</span>
           </div>
-          <div className="foot">Across {rmCount} rural municipalities</div>
+          <div className="foot">{rmCount} rural municipalities</div>
         </div>
         <div className="cell">
           <div className="lbl">
-            Auctions open <span className="pip">§</span>
+            Auctions <span className="pip">§</span>
           </div>
           <div className="val figure">
             {liveAuction && liveAuction.status === "open" ? "1" : "0"}
@@ -1168,8 +1225,8 @@ export function FarmAuctionApp() {
           </div>
           <div className={liveAuction && liveAuction.status === "open" ? "foot live" : "foot"}>
             {liveAuction && liveAuction.status === "open"
-              ? `● ${liveAuction.title} — ${minsRemaining} min remaining`
-              : "Next bell announced weekly"}
+              ? `● ${minsRemaining} min remaining`
+              : "No auction open"}
           </div>
         </div>
         <div className="cell">
@@ -1189,10 +1246,10 @@ export function FarmAuctionApp() {
         <div className="sec-head">
           <span className="sign">§01 &nbsp; Inventory</span>
           <h2 className="title">
-            The book of <em>open files</em> — sale, lease, wanted, and pending.
+            Open <em>files.</em>
           </h2>
           <p className="lede">
-            Filter by status, region, soil, or price per acre. Every card is a working file maintained by Wyatt Realty Group; satellite and ground views are kept current within 14 days.
+            Sale, lease, wanted, and pending farmland across Saskatchewan. Filter the docket.
           </p>
         </div>
 
@@ -1283,10 +1340,10 @@ export function FarmAuctionApp() {
         <div className="sec-head">
           <span className="sign">§02 &nbsp; The auction floor</span>
           <h2 className="title">
-            A reserve, a bell, and an <em>open ledger.</em>
+            A reserve, a bell, an <em>open ledger.</em>
           </h2>
           <p className="lede">
-            Approved bidders only. Reserve is published before the bell. Every accepted bid is timestamped and broadcast to the floor; the ledger is the record of truth.
+            Approved bidders only. Reserve is published before the bell. Every accepted bid is timestamped to the ledger.
           </p>
         </div>
         <div className="floor-grid">
@@ -1313,7 +1370,7 @@ export function FarmAuctionApp() {
             Bring a file to the <em>floor.</em>
           </h2>
           <p className="lede">
-            Sale, lease, wanted, or auction — Cameron Wyatt files Saskatchewan farmland five days a week. Direct line, direct decision. No pipeline, no committee.
+            Sale, lease, wanted, or auction — Cameron Wyatt files Saskatchewan farmland.
           </p>
         </div>
         <div className="procurement">
@@ -1327,20 +1384,12 @@ export function FarmAuctionApp() {
               </span>
               <div className="creds">
                 <div>
-                  <span className="lbl">License</span>
-                  <span>SK · since 2019</span>
-                </div>
-                <div>
-                  <span className="lbl">Direct</span>
-                  <span>Email or text · same-day reply</span>
-                </div>
-                <div>
                   <span className="lbl">Email</span>
-                  <span>cameron@wyattrealty.ca</span>
+                  <a href="mailto:cameron@wyattrealty.ca">cameron@wyattrealty.ca</a>
                 </div>
                 <div>
                   <span className="lbl">Based</span>
-                  <span>Regina · Treaty 4 · serving province-wide</span>
+                  <span>Regina · Treaty 4 · province-wide</span>
                 </div>
               </div>
             </div>
@@ -1352,7 +1401,7 @@ export function FarmAuctionApp() {
               Tell us what you have, or <em>what you want.</em>
             </h2>
             <p className="lede">
-              A quarter section to move. A buyer with cash. A multi-section file your last broker couldn&apos;t close. We work files; we don&apos;t print brochures.
+              A quarter to move. A buyer with cash. A multi-section file. Send the brief.
             </p>
 
             <form className="contact-form" onSubmit={submitContact}>
@@ -1391,7 +1440,7 @@ export function FarmAuctionApp() {
               </div>
               <label className="check full">
                 <input name="consentNewsletter" type="checkbox" />
-                <span>Send the weekly Almanac — open files, closed lots, and the next bell.</span>
+                <span>Notify me when new lots open or an auction is called.</span>
               </label>
               <button className="submit full" type="submit">
                 Send the brief <span className="arrow">→</span>
@@ -1402,8 +1451,8 @@ export function FarmAuctionApp() {
 
             <div className="newsletter">
               <div className="copy">
-                <strong>The Almanac &nbsp; · &nbsp; weekly</strong>
-                One edition each Monday — new lots, sold prices, soil-rating digests, and the auction calendar for the coming bell.
+                <strong>Notify me</strong>
+                Get an email when a new lot opens or an auction is called. No schedule, no filler.
               </div>
               <form onSubmit={submitNewsletter}>
                 <input
@@ -1427,7 +1476,7 @@ export function FarmAuctionApp() {
           <div>
             <div className="colo-statement">
               <strong>Wyatt Farmland Auctions</strong>
-              A Saskatchewan farmland marketplace — <em>operator-led, built to last,</em> filed weekly out of Regina. Real platform for an active farmland REALTOR®. Not a concept.
+              Saskatchewan farmland — <em>operator-led, built to last.</em> Listings, leases, and live auctions managed by Wyatt Realty Group out of Regina.
             </div>
           </div>
           <div>
@@ -1440,10 +1489,10 @@ export function FarmAuctionApp() {
                 <a href="#floor">Auction floor</a>
               </li>
               <li>
-                <a href="#almanac">Closed lots</a>
+                <a href="#inventory?status=Sold">Closed lots</a>
               </li>
               <li>
-                <a href="#procurement">Wanted files</a>
+                <a href="#inventory?status=Wanted">Wanted files</a>
               </li>
             </ul>
           </div>
@@ -1457,10 +1506,7 @@ export function FarmAuctionApp() {
                 <a href="/bidder-terms/">Bidder terms</a>
               </li>
               <li>
-                <a href="/bidder-terms/">Deposit instructions</a>
-              </li>
-              <li>
-                <a href="/bidder-terms/">Anti-snipe rule</a>
+                <a href="#procurement">Bring a file</a>
               </li>
             </ul>
           </div>
@@ -1471,10 +1517,10 @@ export function FarmAuctionApp() {
                 <a href="mailto:cameron@wyattrealty.ca">cameron@wyattrealty.ca</a>
               </li>
               <li>
-                <a href="#procurement">Wyatt Realty Group</a>
+                <a href="#procurement">Send a brief</a>
               </li>
               <li>
-                <a href="#procurement">Firesky Resorts Ltd.</a>
+                <span style={{ color: "var(--mute)" }}>Regina · Treaty 4</span>
               </li>
             </ul>
           </div>
