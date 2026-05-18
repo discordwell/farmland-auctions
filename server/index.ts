@@ -343,7 +343,7 @@ async function registerRoutes(app: FastifyInstance) {
       await client.query(
         `
           INSERT INTO auction_events (auction_id, actor_type, actor_id, event_type, payload)
-          VALUES ($1, 'bidder', $2, 'bidder.registered', jsonb_build_object('email', $3))
+          VALUES ($1, 'bidder', $2, 'bidder.registered', jsonb_build_object('email', $3::text))
         `,
         [params.id, bidder.rows[0].id, body.email]
       );
@@ -701,7 +701,7 @@ async function registerRoutes(app: FastifyInstance) {
       await client.query(
         `
           INSERT INTO auction_events (auction_id, actor_type, event_type, payload)
-          VALUES ($1, 'admin', 'auction.created', jsonb_build_object('status', $2))
+          VALUES ($1, 'admin', 'auction.created', jsonb_build_object('status', $2::text))
         `,
         [auction.rows[0].id, body.status]
       );
