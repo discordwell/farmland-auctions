@@ -1,26 +1,7 @@
 "use client";
 
-import {
-  ArrowUpRight,
-  Bell,
-  Check,
-  ChevronRight,
-  Clock3,
-  Filter,
-  Gavel,
-  Image as ImageIcon,
-  Landmark,
-  Mail,
-  Map,
-  MapPinned,
-  Menu,
-  MessageSquare,
-  Search,
-  Sprout,
-  Timer,
-  X
-} from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Menu, X } from "lucide-react";
 import { type Listing, type ListingStatus } from "../data";
 
 const statuses: Array<ListingStatus | "All"> = [
@@ -39,6 +20,12 @@ const cad = new Intl.NumberFormat("en-CA", {
 });
 
 const number = new Intl.NumberFormat("en-CA");
+
+const EDITION_DATE = new Intl.DateTimeFormat("en-CA", {
+  month: "long",
+  day: "numeric",
+  year: "numeric"
+}).format(new Date());
 
 type DisplayBid = {
   id?: string;
@@ -76,7 +63,8 @@ function formatTime(value: string) {
   return new Date(value).toLocaleTimeString("en-CA", {
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit"
+    second: "2-digit",
+    hour12: false
   });
 }
 
@@ -109,67 +97,110 @@ function listingPinPosition(listing: Listing) {
   return { left: `${left}%`, top: `${top}%` };
 }
 
-function statusClass(status: ListingStatus) {
-  return `status status-${status.toLowerCase().replaceAll(" ", "-")}`;
+function statusSlug(status: ListingStatus) {
+  return status.toLowerCase().replaceAll(" ", "-");
 }
 
-function ListingCard({ listing }: { listing: Listing }) {
+function formatLotNumber(index: number) {
+  return String(index + 1).padStart(3, "0");
+}
+
+function CompassRose() {
+  return (
+    <svg className="compass" viewBox="0 0 60 60" fill="none" stroke="currentColor" strokeWidth="1">
+      <circle cx="30" cy="30" r="22" opacity="0.5" />
+      <circle cx="30" cy="30" r="14" opacity="0.3" />
+      <path d="M30 6 L33 30 L30 54 L27 30 Z" fill="currentColor" opacity="0.9" />
+      <path d="M6 30 L30 27 L54 30 L30 33 Z" fill="currentColor" opacity="0.4" />
+      <text x="30" y="4" textAnchor="middle" fill="currentColor" fontFamily="IBM Plex Mono" fontSize="6" fontWeight="600">
+        N
+      </text>
+      <text x="30" y="60" textAnchor="middle" fill="currentColor" fontFamily="IBM Plex Mono" fontSize="6">
+        S
+      </text>
+      <text x="58" y="32" textAnchor="end" fill="currentColor" fontFamily="IBM Plex Mono" fontSize="6">
+        E
+      </text>
+      <text x="2" y="32" fill="currentColor" fontFamily="IBM Plex Mono" fontSize="6">
+        W
+      </text>
+    </svg>
+  );
+}
+
+function LotCard({ listing, lotIndex }: { listing: Listing; lotIndex: number }) {
   const [mediaMode, setMediaMode] = useState<"photo" | "satellite">("photo");
   const imageSrc = mediaMode === "photo" ? listing.image : listing.satellite;
+  const lotNo = formatLotNumber(lotIndex);
+  const statusKey = statusSlug(listing.status);
+  const soilGap = Math.max(0, Math.min(100, 100 - listing.soilRating));
+  const isWanted = listing.status === "Wanted";
 
   return (
-    <article className="listing-card">
-      <div className="listing-media">
-        <img src={imageSrc} alt={`${listing.title} ${mediaMode} view`} />
-        <div className="media-tabs" aria-label="Listing media">
+    <article className="lot">
+      <div className="lot-media">
+        <img src={imageSrc} alt={`Lot ${lotNo} — ${listing.title} (${mediaMode})`} />
+        <span className="lot-no">
+          Lot <span className="num">{lotNo}</span>
+        </span>
+        <span className={`lot-status s-${statusKey}`}>
+          <span className="swatch"></span>
+          {listing.status}
+        </span>
+        <div className="media-toggle" aria-label="Lot media">
           <button
-            className={mediaMode === "photo" ? "active" : ""}
+            className={mediaMode === "photo" ? "on" : ""}
             type="button"
-            title="Photos"
-            aria-label="Photos"
             onClick={() => setMediaMode("photo")}
           >
-            <ImageIcon size={16} />
+            Photo
           </button>
           <button
-            className={mediaMode === "satellite" ? "active" : ""}
+            className={mediaMode === "satellite" ? "on" : ""}
             type="button"
-            title="Satellite"
-            aria-label="Satellite"
             onClick={() => setMediaMode("satellite")}
           >
-            <Map size={16} />
+            Satellite
           </button>
         </div>
-        <span className={statusClass(listing.status)}>{listing.status}</span>
       </div>
-      <div className="listing-body">
+      <div className="lot-head">
         <div>
-          <p className="eyebrow">{listing.rm}</p>
+          <div className="rm">{listing.rm}</div>
           <h3>{listing.title}</h3>
         </div>
-        <dl className="listing-stats">
-          <div>
-            <dt>Title Acres</dt>
-            <dd>{number.format(listing.acres)}</dd>
-          </div>
-          <div>
-            <dt>$/Acre</dt>
-            <dd>{cad.format(listing.pricePerAcre)}</dd>
-          </div>
-          <div>
-            <dt>Avg. AV/Qtr</dt>
-            <dd>{cad.format(listing.avgAssessment)}</dd>
-          </div>
-          <div>
-            <dt>Soil Final</dt>
-            <dd>{listing.soilRating}</dd>
-          </div>
-        </dl>
-        <div className="listing-footer">
-          <span>{listing.type}</span>
-          <span>{listing.coordinates}</span>
+        <div className="legal">{listing.coordinates || "—"}</div>
+      </div>
+      <dl className="lot-stats">
+        <div>
+          <dt>{isWanted ? "Seeking" : "Title acres"}</dt>
+          <dd>{number.format(listing.acres)}</dd>
         </div>
+        <div>
+          <dt>{isWanted ? "To pay" : "$ / acre"}</dt>
+          <dd>{cad.format(listing.pricePerAcre)}</dd>
+        </div>
+        <div>
+          <dt>Avg AV / Qtr</dt>
+          <dd>{cad.format(listing.avgAssessment)}</dd>
+        </div>
+        <div>
+          <dt>Final soil</dt>
+          <dd>{listing.soilRating}</dd>
+        </div>
+      </dl>
+      <div className="lot-soil">
+        <span className="lbl">{listing.type}</span>
+        <div className="bar">
+          <div className="fill" style={{ right: `${soilGap}%` }}></div>
+        </div>
+        <span className="val">{listing.soilRating}/100</span>
+      </div>
+      <div className="lot-foot">
+        <span className="type">{listing.region}</span>
+        <a className="view" href="#floor">
+          {listing.status === "Sold" ? "Closing record →" : isWanted ? "Submit a file →" : "View file →"}
+        </a>
       </div>
     </article>
   );
@@ -186,17 +217,29 @@ function Countdown({ closesAt }: { closesAt?: string }) {
     return () => window.clearInterval(id);
   }, [closesAt]);
 
-  const mins = Math.floor(seconds / 60)
-    .toString()
-    .padStart(2, "0");
+  const hrs = Math.floor(seconds / 3600).toString().padStart(2, "0");
+  const mins = Math.floor((seconds % 3600) / 60).toString().padStart(2, "0");
   const secs = (seconds % 60).toString().padStart(2, "0");
 
   return (
-    <div className="countdown" aria-label="Auction countdown">
-      <Timer size={18} />
-      <span>{mins}</span>
-      <span>:</span>
-      <span>{secs}</span>
+    <div className="countdown" aria-label="Time remaining">
+      <div className="lbl">Time to bell</div>
+      <div className="clock">
+        <span>
+          {hrs}
+          <span className="unit">hr</span>
+        </span>
+        <span className="sep">:</span>
+        <span>
+          {mins}
+          <span className="unit">min</span>
+        </span>
+        <span className="sep">:</span>
+        <span>
+          {secs}
+          <span className="unit">sec</span>
+        </span>
+      </div>
     </div>
   );
 }
@@ -234,12 +277,10 @@ function AuctionPanel({
       setBidError("No active auction");
       return;
     }
-
     if (auction.status !== "open") {
       setBidError("Auction is not open");
       return;
     }
-
     if (!bidderEmail.trim()) {
       setBidError("Enter the approved bidder email");
       return;
@@ -257,9 +298,7 @@ function AuctionPanel({
           bidderEmail: bidderEmail.trim(),
           idempotencyKey: crypto.randomUUID()
         }),
-        headers: {
-          "content-type": "application/json"
-        },
+        headers: { "content-type": "application/json" },
         method: "POST"
       });
       const payload = (await response.json()) as BidAcceptedPayload & {
@@ -274,7 +313,9 @@ function AuctionPanel({
       }
 
       onBidAccepted(payload);
-      setBidAmount(payload.auction.currentHighBidDollars + payload.auction.bidIncrementCents / 100);
+      setBidAmount(
+        payload.auction.currentHighBidDollars + payload.auction.bidIncrementCents / 100
+      );
     } catch {
       setBidError("Bid service is offline");
     } finally {
@@ -284,141 +325,259 @@ function AuctionPanel({
 
   if (!auction) {
     return (
-      <section className="auction-panel" aria-labelledby="auction-title">
-        <div className="panel-head">
+      <article className="auction" aria-labelledby="auction-h">
+        <header className="auction-top">
           <div>
-            <p className="eyebrow">Auction</p>
-            <h2 id="auction-title">{isLoading ? "Loading auction" : "No active auction"}</h2>
+            <span className="live" style={{ color: "#b9b08f" }}>
+              {isLoading ? "· Loading floor" : "· Floor closed"}
+            </span>
+            <h2 id="auction-h">{isLoading ? "Checking the bell" : "No live auction"}</h2>
+            <div className="legal">Wyatt Realty Group · Regina · Treaty 4</div>
           </div>
+        </header>
+        <div className="auction-empty">
+          <strong>{isLoading ? "Auction file loading" : "Registration is closed"}</strong>
+          New farmland auction files appear here when Wyatt Realty Group opens them.
         </div>
-        <div className="empty-state panel-empty">
-          <strong>{isLoading ? "Checking availability" : "Registration is closed"}</strong>
-          <span>
-            {isLoading
-              ? "Auction data is loading."
-              : "New farmland auction files will appear here when opened by Wyatt Realty Group."}
-          </span>
-        </div>
-      </section>
+      </article>
     );
   }
 
   const currentHigh = Math.max(auction.currentHighBidDollars, bids[0]?.amount ?? 0);
   const isOpen = auction.status === "open";
+  const increment = auction.bidIncrementCents / 100;
+  const minNext = currentHigh + increment;
 
   return (
-    <section className="auction-panel" aria-labelledby="auction-title">
-      <div className="panel-head">
+    <article className="auction" aria-labelledby="auction-h">
+      <header className="auction-top">
         <div>
-          <p className={isOpen ? "eyebrow live-dot" : "eyebrow"}>{isOpen ? "Live auction" : "Auction"}</p>
-          <h2 id="auction-title">{auction.title}</h2>
+          <span className="live" aria-hidden={!isOpen}>
+            {isOpen ? <span className="dot"></span> : null}
+            {isOpen ? "Live · " : "· "}
+            {auction.status.toUpperCase()} · Bell at {new Date(auction.closesAt).toLocaleTimeString("en-CA", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false
+            })} CST
+          </span>
+          <h2 id="auction-h">{auction.title}</h2>
+          <div className="legal">Approved bidders only · Anti-snipe rule in effect</div>
         </div>
         <Countdown closesAt={auction.closesAt} />
-      </div>
-      <div className="auction-grid">
+      </header>
+
+      <div className="auction-body">
         <div className="bid-now">
-          <span className="label">Current high bid</span>
-          <strong>{currentHigh > 0 ? cad.format(currentHigh) : cad.format(0)}</strong>
-          <div className="reserve-row">
-            <Check size={16} />
-            <span>{auction.reserveMet ? "Reserve met" : "Reserve pending"}</span>
+          <div className="row1">
+            <div>
+              <div className="lbl">Current high bid</div>
+              <div className="price figure">
+                <span className="cur">CAD</span>
+                {currentHigh > 0 ? number.format(currentHigh) : "—"}
+                {currentHigh > 0 && bids.length ? (
+                  <span className="ppa">
+                    bid no. {bids.length} · increment {cad.format(increment)}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            {auction.reserveMet ? (
+              <div className="stamp">
+                Reserve
+                <br />
+                Met
+                <span className="sub">{EDITION_DATE}</span>
+              </div>
+            ) : (
+              <div className="stamp pending">
+                Reserve
+                <br />
+                Pending
+                <span className="sub">Bell open</span>
+              </div>
+            )}
           </div>
-          <form onSubmit={submitBid}>
-            <label htmlFor="bidderEmail">Approved bidder email</label>
-            <input
-              className="bid-email"
-              id="bidderEmail"
-              type="email"
-              autoComplete="email"
-              value={bidderEmail}
-              onChange={(event) => onBidderEmailChange(event.target.value)}
-            />
-            <label htmlFor="bidAmount">Bid command</label>
-            <div className="bid-command">
+
+          <form className="bid-form" onSubmit={submitBid}>
+            <div className="field">
+              <label htmlFor="bidderEmail">Approved bidder · email</label>
               <input
-                id="bidAmount"
-                inputMode="numeric"
-                value={bidAmount}
-                onChange={(event) => setBidAmount(Number(event.target.value))}
+                id="bidderEmail"
+                type="email"
+                autoComplete="email"
+                placeholder="bidder@operations.ca"
+                value={bidderEmail}
+                onChange={(event) => onBidderEmailChange(event.target.value)}
               />
-              <button type="submit" disabled={isSubmitting || !isOpen}>
-                <Gavel size={17} />
-                {isSubmitting ? "Sending" : isOpen ? "Submit" : "Closed"}
-              </button>
+            </div>
+            <div className="field">
+              <label htmlFor="bidAmount">Bid command · increment {cad.format(increment)}</label>
+              <div className="bid-input">
+                <span className="cur">CAD</span>
+                <input
+                  id="bidAmount"
+                  inputMode="numeric"
+                  value={Number.isFinite(bidAmount) ? bidAmount : 0}
+                  onChange={(event) => {
+                    const parsed = Number(event.target.value.replace(/[^0-9.]/g, ""));
+                    setBidAmount(Number.isFinite(parsed) ? parsed : 0);
+                  }}
+                />
+                <button type="submit" disabled={isSubmitting || !isOpen}>
+                  {isSubmitting ? "Sending" : isOpen ? "Drop the gavel ▾" : "Closed"}
+                </button>
+              </div>
+            </div>
+            <div className="hint">
+              Minimum next bid: <strong>{cad.format(minNext)}</strong>. Bids accepted within the final 90 s extend the bell by 90 s. <strong>Anti-snipe rule in effect.</strong>
             </div>
             {bidError ? <p className="form-status">{bidError}</p> : null}
           </form>
         </div>
-        <div className="bid-ledger">
-          <div className="ledger-title">
-            <Clock3 size={16} />
-            <span>Bid history</span>
-          </div>
+
+        <div className="ledger">
+          <header className="ledger-head">
+            <div className="ttl">
+              <span className="pip">§</span>&nbsp; Bid ledger · accepted &amp; recorded
+            </div>
+            <div className="count">{bids.length} of {bids.length}</div>
+          </header>
           {bids.length ? (
-            bids.map((bid, index) => (
-              <div className="ledger-row" key={`${bid.bidder}-${bid.time}-${index}`}>
-                <span>{bid.bidder}</span>
-                <strong>{cad.format(bid.amount)}</strong>
-                <time>{bid.time}</time>
-              </div>
-            ))
+            <ul className="ledger-feed">
+              {bids.map((bid, idx) => (
+                <li
+                  className={idx === 0 ? "high" : ""}
+                  key={bid.id ?? `${bid.bidder}-${bid.time}-${idx}`}
+                >
+                  <span className="car">{idx === 0 ? "▶" : "›"}</span>
+                  <span className="id">BIDDER {bid.bidder.toUpperCase()}</span>
+                  <span className="amt figure">{cad.format(bid.amount)}</span>
+                  <span className="time">{bid.time}</span>
+                </li>
+              ))}
+            </ul>
           ) : (
-            <div className="empty-state compact-empty">
-              <strong>No accepted bids</strong>
-              <span>Accepted bids will appear as they are recorded.</span>
+            <div className="ledger-empty">
+              <strong>No accepted bids yet</strong>
+              Bids appear here as they are recorded.
             </div>
           )}
         </div>
       </div>
-    </section>
+    </article>
   );
 }
 
-function RmMap({ listings }: { listings: Listing[] }) {
+function RmMap({
+  listings,
+  lotNumberFor
+}: {
+  listings: Listing[];
+  lotNumberFor: (id: string) => number;
+}) {
   const pins = listings
     .map((listing) => {
       const position = listingPinPosition(listing);
       if (!position) return null;
       return {
-        label: listing.rm,
+        index: lotNumberFor(listing.id),
+        label: listing.rm.replace(/^RM\s*/i, "").replace(/\s+No\.\s*\d+/i, (m) => m.trim()),
         status: listing.status,
         ...position
       };
     })
-    .filter((pin): pin is { label: string; left: string; top: string; status: ListingStatus } =>
+    .filter((pin): pin is { index: number; label: string; left: string; top: string; status: ListingStatus } =>
       Boolean(pin)
     );
 
+  const counts = useMemo(() => {
+    const all = { "For Sale": 0, Pending: 0, Sold: 0, Wanted: 0, Lease: 0 } as Record<ListingStatus, number>;
+    listings.forEach((listing) => {
+      all[listing.status] = (all[listing.status] ?? 0) + 1;
+    });
+    return all;
+  }, [listings]);
+
   return (
-    <section className="map-panel" aria-labelledby="map-title">
-      <div className="panel-head compact">
+    <aside className="map-card" aria-labelledby="map-title">
+      <div className="map-head">
         <div>
-          <p className="eyebrow">RM map</p>
-          <h2 id="map-title">Published listing locations</h2>
+          <div className="lbl">Plate I</div>
+          <h2 id="map-title">RM map · open files</h2>
+        </div>
+        <div className="scale">
+          <strong>Saskatchewan</strong>
+          Range 1–30 W3
+          <br />
+          Twp 1 — 56
         </div>
       </div>
       <div className="map-surface">
+        <CompassRose />
         {pins.length ? (
           pins.map((pin) => (
             <span
-              className={`map-pin pin-${pin.status.toLowerCase().replaceAll(" ", "-")}`}
-              key={`${pin.label}-${pin.left}-${pin.top}`}
+              className={`pin s-${statusSlug(pin.status)}`}
+              key={`${pin.label}-${pin.left}-${pin.top}-${pin.index}`}
               style={{ top: pin.top, left: pin.left }}
               title={`${pin.label}: ${pin.status}`}
-              aria-label={`${pin.label}: ${pin.status}`}
             >
-              <MapPinned size={15} />
-              <span>{pin.label}</span>
+              <span className="num">{formatLotNumber(pin.index)}</span> {pin.label}
             </span>
           ))
         ) : (
-          <div className="empty-state map-empty">
-            <strong>No mapped listings</strong>
-            <span>Mapped listings will appear here.</span>
+          <div className="map-empty">
+            <strong>No mapped files</strong>
+            Listings with coordinates appear on the plate.
           </div>
         )}
+        <div className="map-title">
+          <div>
+            <div className="coords">Plate I · Province of Saskatchewan</div>
+            <div className="name">
+              <em>Open files,</em> rural municipalities
+            </div>
+          </div>
+          <div className="bar">
+            0 — 250 km
+            <div className="line"></div>
+          </div>
+        </div>
       </div>
-    </section>
+      <div className="legend">
+        <div className="item">
+          <span className="swatch"></span>
+          <span>For sale</span>
+          <span className="count">{counts["For Sale"]}</span>
+        </div>
+        <div className="item s-pending">
+          <span className="swatch"></span>
+          <span>Pending</span>
+          <span className="count">{counts.Pending}</span>
+        </div>
+        <div className="item s-sold">
+          <span className="swatch"></span>
+          <span>Sold</span>
+          <span className="count">{counts.Sold}</span>
+        </div>
+        <div className="item s-wanted">
+          <span className="swatch"></span>
+          <span>Wanted</span>
+          <span className="count">{counts.Wanted}</span>
+        </div>
+        <div className="item s-lease">
+          <span className="swatch"></span>
+          <span>Lease</span>
+          <span className="count">{counts.Lease}</span>
+        </div>
+        <div className="item s-live">
+          <span className="swatch"></span>
+          <span>Live now</span>
+          <span className="count">{counts.Pending > 0 ? 1 : 0}</span>
+        </div>
+      </div>
+    </aside>
   );
 }
 
@@ -466,9 +625,7 @@ function BidderRegistration({
           termsVersion: "2026-05-18",
           termsAccepted
         }),
-        headers: {
-          "content-type": "application/json"
-        },
+        headers: { "content-type": "application/json" },
         method: "POST"
       });
 
@@ -486,109 +643,140 @@ function BidderRegistration({
     }
   }
 
-  return (
-    <aside className="bidder-panel">
-      <div className="panel-head compact">
-        <div>
-          <p className="eyebrow">Bidder portal</p>
-          <h2>Register for auction</h2>
+  if (!auction) {
+    return (
+      <aside className="register">
+        <header className="register-head">
+          <span className="pre">§02·b &nbsp; Bidder portal</span>
+          <h3>Apply to bid</h3>
+        </header>
+        <div className="register-empty">
+          <strong>No floor open</strong>
+          Registration opens with the next auction.
         </div>
-      </div>
-      {auction ? (
-        <form className="registration-form" onSubmit={submitRegistration}>
-          <label>
-            Legal name
-            <input
-              value={legalName}
-              onChange={(event) => setLegalName(event.target.value)}
-              autoComplete="organization"
-              required
-            />
-          </label>
-          <label>
-            Entity type
-            <select value={entityType} onChange={(event) => setEntityType(event.target.value)}>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="register">
+      <header className="register-head">
+        <span className="pre">§02·b &nbsp; Bidder portal</span>
+        <h3>Apply to bid</h3>
+        <p className="note">
+          Submit identity &amp; proof of funds at least <strong>24 hours</strong> before the bell. Approval is at Wyatt Realty Group&apos;s sole discretion.
+        </p>
+      </header>
+      <form className="register-form" onSubmit={submitRegistration}>
+        <div className="field">
+          <label htmlFor="reg-name">Legal name</label>
+          <input
+            id="reg-name"
+            value={legalName}
+            onChange={(event) => setLegalName(event.target.value)}
+            autoComplete="organization"
+            placeholder="Grant Olson"
+            required
+          />
+        </div>
+        <div className="grid2">
+          <div className="field">
+            <label htmlFor="reg-entity">Entity</label>
+            <select id="reg-entity" value={entityType} onChange={(event) => setEntityType(event.target.value)}>
               <option value="individual">Individual</option>
               <option value="corporation">Corporation</option>
               <option value="partnership">Partnership</option>
               <option value="trust">Trust</option>
             </select>
-          </label>
-          <label>
-            Email
+          </div>
+          <div className="field">
+            <label htmlFor="reg-phone">Phone</label>
             <input
-              type="email"
-              value={bidderEmail}
-              onChange={(event) => onBidderEmailChange(event.target.value)}
-              autoComplete="email"
-              required
-            />
-          </label>
-          <label>
-            Phone
-            <input
+              id="reg-phone"
               value={phone}
               onChange={(event) => setPhone(event.target.value)}
               autoComplete="tel"
+              placeholder="306 555 0119"
             />
-          </label>
-          <label>
-            Mailing address
-            <textarea
-              value={mailingAddress}
-              onChange={(event) => setMailingAddress(event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            ID document link
+          </div>
+        </div>
+        <div className="field">
+          <label htmlFor="reg-email">Email</label>
+          <input
+            id="reg-email"
+            type="email"
+            value={bidderEmail}
+            onChange={(event) => onBidderEmailChange(event.target.value)}
+            autoComplete="email"
+            placeholder="bidder@operations.ca"
+            required
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="reg-mail">Mailing address</label>
+          <textarea
+            id="reg-mail"
+            value={mailingAddress}
+            onChange={(event) => setMailingAddress(event.target.value)}
+            placeholder="Box, RM, Province, Postal Code"
+            required
+          />
+        </div>
+        <div className="grid2">
+          <div className="field">
+            <label htmlFor="reg-id">ID document — link</label>
             <input
+              id="reg-id"
               value={identityDocumentUrl}
               onChange={(event) => setIdentityDocumentUrl(event.target.value)}
+              placeholder="dropbox.com/..."
             />
-          </label>
-          <label>
-            Proof of funds link
+          </div>
+          <div className="field">
+            <label htmlFor="reg-funds">Proof of funds — link</label>
             <input
+              id="reg-funds"
               value={proofOfFundsUrl}
               onChange={(event) => setProofOfFundsUrl(event.target.value)}
+              placeholder="dropbox.com/..."
             />
-          </label>
-          <label>
-            Deposit reference
-            <input
-              value={depositReference}
-              onChange={(event) => setDepositReference(event.target.value)}
-            />
-          </label>
-          <label>
-            Notes
-            <textarea value={bidderNotes} onChange={(event) => setBidderNotes(event.target.value)} />
-          </label>
-          <label className="check-row">
-            <input
-              type="checkbox"
-              checked={termsAccepted}
-              onChange={(event) => setTermsAccepted(event.target.checked)}
-              required
-            />
-            <span>
-              I accept the <a href="/bidder-terms/">bidder terms</a> for this auction.
-            </span>
-          </label>
-          <button type="submit" disabled={isSubmitting}>
-            <Check size={17} />
-            {isSubmitting ? "Submitting" : "Submit registration"}
-          </button>
-          {status ? <p className="form-status success">{status}</p> : null}
-          {error ? <p className="form-status">{error}</p> : null}
-        </form>
-      ) : (
-        <div className="empty-state panel-empty">
-          <strong>No auction registration</strong>
-          <span>Registration opens when an auction is active.</span>
+          </div>
         </div>
-      )}
+        <div className="field">
+          <label htmlFor="reg-deposit">Deposit reference</label>
+          <input
+            id="reg-deposit"
+            value={depositReference}
+            onChange={(event) => setDepositReference(event.target.value)}
+            placeholder="Wire ref · trust account"
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="reg-notes">Notes</label>
+          <textarea
+            id="reg-notes"
+            value={bidderNotes}
+            onChange={(event) => setBidderNotes(event.target.value)}
+            placeholder="Anything Wyatt Realty should know."
+          />
+        </div>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={termsAccepted}
+            onChange={(event) => setTermsAccepted(event.target.checked)}
+            required
+          />
+          <span>
+            I accept the <a href="/bidder-terms/">bidder terms</a> for this floor — including 10% deposit on bell, 30-day close, and anti-snipe extension.
+          </span>
+        </label>
+        <button className="submit" type="submit" disabled={isSubmitting}>
+          {isSubmitting ? "Submitting" : "Submit for approval"} <span className="arrow">→</span>
+        </button>
+        {status ? <p className="form-status success">{status}</p> : null}
+        {error ? <p className="form-status">{error}</p> : null}
+      </form>
     </aside>
   );
 }
@@ -681,7 +869,7 @@ export function FarmAuctionApp() {
     setLiveAuction(payload.auction);
     setLiveBids((current) => {
       if (current.some((bid) => bid.id === payload.bid.id)) return current;
-      return [mapApiBid(payload.bid), ...current].slice(0, 6);
+      return [mapApiBid(payload.bid), ...current].slice(0, 8);
     });
   }
 
@@ -692,26 +880,28 @@ export function FarmAuctionApp() {
     setContactStatus("");
     setContactError("");
 
+    const rawMessage = String(data.get("message") ?? "").trim();
+    const rmHint = String(data.get("rmHint") ?? "").trim();
+    const message = rmHint ? `RM hint: ${rmHint}\n\n${rawMessage}` : rawMessage;
+
     try {
       const response = await fetch("/api/contact-inquiries", {
         body: JSON.stringify({
           email: data.get("email"),
           fileType: data.get("fileType"),
-          message: data.get("message"),
+          message,
           name: data.get("name"),
           phone: data.get("phone"),
           consentNewsletter: data.get("consentNewsletter") === "on"
         }),
-        headers: {
-          "content-type": "application/json"
-        },
+        headers: { "content-type": "application/json" },
         method: "POST"
       });
       if (!response.ok) throw new Error("Contact inquiry failed");
       form.reset();
-      setContactStatus("Inquiry sent.");
+      setContactStatus("Brief sent. Cameron will be in touch.");
     } catch {
-      setContactError("Inquiry service is offline. Email cameron@wyattrealty.ca.");
+      setContactError("Inquiry service offline — email cameron@wyattrealty.ca.");
     }
   }
 
@@ -726,14 +916,12 @@ export function FarmAuctionApp() {
           email: newsletterEmail.trim(),
           source: "website"
         }),
-        headers: {
-          "content-type": "application/json"
-        },
+        headers: { "content-type": "application/json" },
         method: "POST"
       });
       if (!response.ok) throw new Error("Newsletter signup failed");
       setNewsletterEmail("");
-      setNewsletterStatus("Subscribed.");
+      setNewsletterStatus("Subscribed. Next edition lands Monday.");
     } catch {
       setNewsletterError("Signup is unavailable.");
     }
@@ -757,40 +945,55 @@ export function FarmAuctionApp() {
     () => ["All", ...Array.from(new Set(backendListings.map((listing) => listing.type))).sort()],
     [backendListings]
   );
-  const publicMetrics = useMemo(
-    () => [
-      {
-        label: "Published listings",
-        value: number.format(backendListings.length),
-        icon: Landmark
-      },
-      {
-        label: "Listed acres",
-        value: number.format(Math.round(backendListings.reduce((sum, listing) => sum + listing.acres, 0))),
-        icon: Sprout
-      },
-      {
-        label: "Active auction",
-        value: liveAuction ? "1" : "0",
-        icon: Gavel
-      },
-      {
-        label: "Current high bid",
-        value: liveAuction && liveAuction.currentHighBidDollars > 0
-          ? cad.format(liveAuction.currentHighBidDollars)
-          : "None",
-        icon: Clock3
-      }
-    ],
-    [backendListings, liveAuction]
+
+  const statusCounts = useMemo(() => {
+    const map: Record<string, number> = { All: backendListings.length };
+    backendListings.forEach((listing) => {
+      map[listing.status] = (map[listing.status] ?? 0) + 1;
+    });
+    return map;
+  }, [backendListings]);
+
+  const lotNumberById = useMemo(() => {
+    const map = new Map<string, number>();
+    backendListings.forEach((listing, idx) => map.set(listing.id, idx));
+    return map;
+  }, [backendListings]);
+  const lotNumberFor = (id: string) => lotNumberById.get(id) ?? 0;
+
+  const totalAcres = useMemo(
+    () => backendListings.reduce((sum, listing) => sum + listing.acres, 0),
+    [backendListings]
   );
+  const rmCount = useMemo(
+    () => new Set(backendListings.map((listing) => listing.rm)).size,
+    [backendListings]
+  );
+  const spotPricePerAcre = useMemo(() => {
+    const priced = backendListings.filter((listing) => listing.pricePerAcre > 0);
+    if (!priced.length) return 0;
+    return Math.round(priced.reduce((sum, listing) => sum + listing.pricePerAcre, 0) / priced.length);
+  }, [backendListings]);
+
+  const editionVolume = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 1);
+    const week = Math.ceil(((now.getTime() - start.getTime()) / 86_400_000 + start.getDay() + 1) / 7);
+    return `Vol. ${now.getFullYear() - 2025} · No. ${week}`;
+  }, []);
+
+  const highBidCurrent = Math.max(
+    liveAuction?.currentHighBidDollars ?? 0,
+    liveBids[0]?.amount ?? 0
+  );
+  const secsRemaining = secondsUntil(liveAuction?.closesAt);
+  const minsRemaining = Math.floor(secsRemaining / 60);
 
   function toggleStatus(nextStatus: ListingStatus | "All") {
     if (nextStatus === "All") {
       setStatus(["All"]);
       return;
     }
-
     const active = status.filter((item) => item !== "All");
     const next = active.includes(nextStatus)
       ? active.filter((item) => item !== nextStatus)
@@ -800,242 +1003,491 @@ export function FarmAuctionApp() {
 
   return (
     <main>
-      <header className="site-header">
-        <a className="brand" href="#top" aria-label="Wyatt Farmland Auctions home">
-          <span className="brand-mark">
-            <Landmark size={19} />
-          </span>
+      <div className="edition">
+        <div className="left">
+          <span>{editionVolume}</span>
+          <span>Week of {EDITION_DATE}</span>
+          <span>Regina, SK · Treaty 4</span>
+        </div>
+        <div className="center">
+          {liveAuction && liveAuction.status === "open" ? (
+            <span className="live-tag">
+              <span className="dot"></span>
+              Auction floor open · {liveAuction.title} closes in {minsRemaining} min
+            </span>
+          ) : (
+            <span>Auction floor · Next bell announced weekly</span>
+          )}
+        </div>
+        <div className="right">
+          {spotPricePerAcre > 0 ? (
+            <span>
+              Spot $/Ac. <strong>{number.format(spotPricePerAcre)}</strong>
+            </span>
+          ) : null}
           <span>
-            <strong>Wyatt</strong>
-            <small>Farmland Auctions</small>
+            Acres listed <strong>{number.format(Math.round(totalAcres))}</strong>
           </span>
-        </a>
-        <nav className={mobileNav ? "nav-links open" : "nav-links"}>
-          <a href="#listings">Listings</a>
-          <a href="#auction">Auction</a>
-          <a href="#contact">Contact</a>
-        </nav>
-        <div className="header-actions">
-          <a className="ghost-button" href="mailto:cameron@wyattrealty.ca?subject=Farmland auction inquiry">
-            <Mail size={17} />
-            Inquire
+        </div>
+      </div>
+
+      <header className="mast">
+        <div className="mast-inner">
+          <a className="wordmark" href="#top" aria-label="Wyatt Farmland Auctions home">
+            <span className="mark">W</span>
+            <span className="lockup">
+              <span className="name">Wyatt</span>
+              <span className="sub">Farmland Auctions · Est. 2019</span>
+            </span>
           </a>
-          <button
-            className="icon-button nav-toggle"
-            title="Menu"
-            aria-label="Toggle navigation"
-            onClick={() => setMobileNav((value) => !value)}
-          >
-            {mobileNav ? <X size={19} /> : <Menu size={19} />}
-          </button>
+          <nav className={mobileNav ? "navlinks open" : "navlinks"} aria-label="Primary">
+            <a href="#inventory">The Inventory</a>
+            <a href="#floor" className={liveAuction && liveAuction.status === "open" ? "current" : ""}>
+              The Floor
+            </a>
+            <a href="#procurement">Procurement</a>
+            <a href="#almanac">The Almanac</a>
+          </nav>
+          <div className="mast-actions">
+            <a className="btn btn-ghost btn-sm" href="#procurement">
+              Bring a file <span className="arrow">→</span>
+            </a>
+            <a className="btn btn-primary btn-sm" href="#floor">
+              Open auction <span className="arrow">→</span>
+            </a>
+            <button
+              className="nav-toggle"
+              type="button"
+              aria-label="Toggle navigation"
+              onClick={() => setMobileNav((value) => !value)}
+            >
+              {mobileNav ? <X size={18} /> : <Menu size={18} />}
+            </button>
+          </div>
         </div>
       </header>
 
-      <section className="hero-shell" id="top">
-        <div className="hero-copy">
-          <p className="eyebrow">Saskatchewan REALTOR | Wyatt Realty Group</p>
-          <h1>Wyatt Farmland Auctions</h1>
-          <p>Saskatchewan farmland listings and auctions managed by Wyatt Realty Group.</p>
+      <section className="hero" id="top">
+        <div className="hero-text">
+          <div className="hero-meta">
+            <div className="byline">
+              <span>Filed by</span>
+              <strong>Cameron Wyatt</strong>
+              <span className="trail">— Saskatchewan REALTOR®</span>
+            </div>
+            <span className="sign">N&nbsp;52°&nbsp;9&apos;&nbsp;&nbsp;W&nbsp;106°&nbsp;38&apos;</span>
+          </div>
+          <div>
+            <h1 className="display">
+              Land,
+              <br />
+              <em>lot by lot.</em>
+              <br />
+              <span style={{ fontStyle: "italic", fontWeight: 500 }}>Bid by bid.</span>
+            </h1>
+            <p className="hero-lede">
+              Saskatchewan farmland — listings, leases, and live auctions managed by Wyatt Realty Group. Every quarter section is catalogued, surveyed, and brought to the floor with a published reserve.
+            </p>
+          </div>
           <div className="hero-actions">
-            <a className="primary-button" href="#auction">
-              <Gavel size={18} />
-              Open Auction
+            <a className="btn btn-ember" href="#floor">
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--paper)" }}></span>
+              Open the floor <span className="arrow">→</span>
             </a>
-            <a className="secondary-button" href="#listings">
-              <Search size={18} />
-              Search Land
+            <a className="btn btn-ghost" href="#inventory">
+              Browse the inventory
             </a>
+            <span className="meta">
+              {liveAuction && liveAuction.status === "open"
+                ? `Next bell · ${new Date(liveAuction.closesAt).toLocaleTimeString("en-CA", { hour: "2-digit", minute: "2-digit", hour12: false })} CST`
+                : "Next bell · announced weekly"}
+            </span>
           </div>
         </div>
-        <div className="hero-console" aria-label="Auction operations snapshot">
-          <div className="hero-photo">
-            <img src="/images/hero-fields.jpg" alt="Prairie farmland rows at sunset" />
-          </div>
-          <div className="signal-strip">
-            {publicMetrics.map((metric) => {
-              const Icon = metric.icon;
-              return (
-                <div key={metric.label}>
-                  <Icon size={18} />
-                  <strong>{metric.value}</strong>
-                  <span>{metric.label}</span>
-                </div>
-              );
-            })}
+        <div className="hero-photo">
+          <img src="/images/hero-fields.jpg" alt="Saskatchewan farmland at sunset" />
+          {liveAuction && liveAuction.status === "open" ? (
+            <span className="badge">
+              <span className="dot"></span>Live · {liveAuction.title}
+            </span>
+          ) : null}
+          <div className="caption">
+            <div className="kicker">
+              {liveAuction ? `Featured lot · ${liveAuction.title}` : "Featured edition · Vol. 1"}
+            </div>
+            <div className="title">
+              North Lipton, <em>a half-section of brown chernozem.</em>
+            </div>
+            <div className="rule"></div>
+            <div className="row">
+              <div>
+                <div className="lbl">Acres</div>
+                <div className="val">{number.format(Math.round(totalAcres))}</div>
+              </div>
+              <div>
+                <div className="lbl">Reserve</div>
+                <div className="val">{liveAuction?.reserveMet ? "Met" : "Open"}</div>
+              </div>
+              <div>
+                <div className="lbl">High bid</div>
+                <div className="val">{highBidCurrent > 0 ? cad.format(highBidCurrent) : "—"}</div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="content-band" id="listings">
-        <div className="section-head">
-          <div>
-            <p className="eyebrow">Listings</p>
-            <h2>Saskatchewan farmland inventory</h2>
+      <div className="stat-rail" aria-label="Now trading">
+        <div className="cell">
+          <div className="lbl">
+            Published lots <span className="pip">§</span>
           </div>
-          <form className="newsletter-form" onSubmit={submitNewsletter}>
-            <input
-              type="email"
-              value={newsletterEmail}
-              onChange={(event) => setNewsletterEmail(event.target.value)}
-              autoComplete="email"
-              placeholder="Email for market alerts"
-              required
-            />
-            <button type="submit">
-              <Bell size={17} />
-              Subscribe
-            </button>
-            {newsletterStatus ? <span>{newsletterStatus}</span> : null}
-            {newsletterError ? <span className="error-text">{newsletterError}</span> : null}
-          </form>
-        </div>
-        <div className="tool-row" aria-label="Listing filters">
-          <div className="filter-group">
-            <span>
-              <Filter size={15} />
-              Status
-            </span>
-            {statuses.map((item) => (
-              <button
-                className={status.includes(item) ? "chip active" : "chip"}
-                key={item}
-                onClick={() => toggleStatus(item)}
-              >
-                {item}
-              </button>
-            ))}
+          <div className="val figure">
+            {number.format(backendListings.length)}
+            <span className="unit">on book</span>
           </div>
-          <label className="select-filter">
-            Region
-            <select value={region} onChange={(event) => setRegion(event.target.value)}>
-              {regionOptions.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
-          <label className="select-filter">
-            Type
-            <select value={propertyType} onChange={(event) => setPropertyType(event.target.value)}>
-              {typeOptions.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
-          <label className="range-filter">
-            Min acres
-            <input
-              inputMode="numeric"
-              value={minAcres}
-              onChange={(event) => setMinAcres(event.target.value)}
-            />
-          </label>
-          <label className="range-filter">
-            Min soil
-            <input
-              inputMode="numeric"
-              value={minSoilRating}
-              onChange={(event) => setMinSoilRating(event.target.value)}
-            />
-          </label>
-          <label className="range-filter">
-            Max $/acre
-            <input
-              inputMode="numeric"
-              value={maxPricePerAcre}
-              onChange={(event) => setMaxPricePerAcre(event.target.value)}
-            />
-          </label>
+          <div className="foot up">▲ {backendListings.length} catalogued this edition</div>
         </div>
-        <div className="listing-layout">
-          <div className="listing-grid">
+        <div className="cell">
+          <div className="lbl">
+            Acres on offer <span className="pip">§</span>
+          </div>
+          <div className="val figure">
+            {number.format(Math.round(totalAcres))}
+            <span className="unit">ac.</span>
+          </div>
+          <div className="foot">Across {rmCount} rural municipalities</div>
+        </div>
+        <div className="cell">
+          <div className="lbl">
+            Auctions open <span className="pip">§</span>
+          </div>
+          <div className="val figure">
+            {liveAuction && liveAuction.status === "open" ? "1" : "0"}
+            <span className="unit">live</span>
+          </div>
+          <div className={liveAuction && liveAuction.status === "open" ? "foot live" : "foot"}>
+            {liveAuction && liveAuction.status === "open"
+              ? `● ${liveAuction.title} — ${minsRemaining} min remaining`
+              : "Next bell announced weekly"}
+          </div>
+        </div>
+        <div className="cell">
+          <div className="lbl">
+            High bid <span className="pip">§</span>
+          </div>
+          <div className="val figure">
+            {highBidCurrent > 0 ? cad.format(highBidCurrent) : "—"}
+          </div>
+          <div className={liveAuction?.reserveMet ? "foot up" : "foot"}>
+            {liveAuction?.reserveMet ? "▲ Reserve met" : "Reserve pending"}
+          </div>
+        </div>
+      </div>
+
+      <section className="band" id="inventory">
+        <div className="sec-head">
+          <span className="sign">§01 &nbsp; Inventory</span>
+          <h2 className="title">
+            The book of <em>open files</em> — sale, lease, wanted, and pending.
+          </h2>
+          <p className="lede">
+            Filter by status, region, soil, or price per acre. Every card is a working file maintained by Wyatt Realty Group; satellite and ground views are kept current within 14 days.
+          </p>
+        </div>
+
+        <div className="docket">
+          <div className="docket-title">
+            <strong>Docket</strong> · status
+          </div>
+          <div className="filter-row">
+            <div className="chips" role="tablist" aria-label="Status">
+              {statuses.map((item) => (
+                <button
+                  className={status.includes(item) ? "chip active" : "chip"}
+                  key={item}
+                  onClick={() => toggleStatus(item)}
+                  type="button"
+                >
+                  {item} <span className="count">{statusCounts[item] ?? 0}</span>
+                </button>
+              ))}
+            </div>
+            <label className="select-pill">
+              <span>Region</span>
+              <select value={region} onChange={(event) => setRegion(event.target.value)}>
+                {regionOptions.map((item) => (
+                  <option key={item}>{item}</option>
+                ))}
+              </select>
+            </label>
+            <label className="select-pill">
+              <span>Type</span>
+              <select value={propertyType} onChange={(event) => setPropertyType(event.target.value)}>
+                {typeOptions.map((item) => (
+                  <option key={item}>{item}</option>
+                ))}
+              </select>
+            </label>
+            <label className="num-in">
+              <span>Min ac.</span>
+              <input
+                inputMode="numeric"
+                value={minAcres}
+                onChange={(event) => setMinAcres(event.target.value)}
+              />
+            </label>
+            <label className="num-in">
+              <span>Soil ≥</span>
+              <input
+                inputMode="numeric"
+                value={minSoilRating}
+                onChange={(event) => setMinSoilRating(event.target.value)}
+              />
+            </label>
+            <label className="num-in">
+              <span>Max $/ac.</span>
+              <input
+                inputMode="numeric"
+                value={maxPricePerAcre}
+                onChange={(event) => setMaxPricePerAcre(event.target.value)}
+              />
+            </label>
+          </div>
+          <div className="right">
+            Showing&nbsp;
+            <strong>
+              {filteredListings.length} of {backendListings.length}
+            </strong>
+          </div>
+        </div>
+
+        <div className="inventory">
+          <div className="lot-grid">
             {filteredListings.length ? (
-              filteredListings.map((listing) => <ListingCard listing={listing} key={listing.id} />)
+              filteredListings.map((listing) => (
+                <LotCard listing={listing} lotIndex={lotNumberFor(listing.id)} key={listing.id} />
+              ))
             ) : (
-              <div className="empty-state listing-empty">
-                <strong>{isListingsLoading ? "Loading listings" : "No listings"}</strong>
-                <span>{listingError || "No published listings match the current filters."}</span>
+              <div className="lot-empty">
+                <strong>{isListingsLoading ? "Loading the book" : "No matching files"}</strong>
+                {listingError || "Adjust the docket filters to see open files."}
               </div>
             )}
           </div>
-          <RmMap listings={filteredListings} />
+          <RmMap listings={filteredListings} lotNumberFor={lotNumberFor} />
         </div>
       </section>
 
-      <section className="auction-band" id="auction">
-        <AuctionPanel
-          auction={liveAuction}
-          bids={liveBids}
-          bidderEmail={bidderEmail}
-          isLoading={isAuctionLoading}
-          onBidderEmailChange={setBidderEmail}
-          onBidAccepted={handleBidAccepted}
-        />
-        <BidderRegistration
-          auction={liveAuction}
-          bidderEmail={bidderEmail}
-          onBidderEmailChange={setBidderEmail}
-        />
-      </section>
-
-      <section className="contact-band" id="contact">
-        <div className="contact-copy">
-          <p className="eyebrow">Cameron Wyatt</p>
-          <h2>Bring a farmland file to market</h2>
-          <p>Sale, lease, wanted, and auction files for Saskatchewan farmland.</p>
+      <section className="band floor" id="floor">
+        <div className="sec-head">
+          <span className="sign">§02 &nbsp; The auction floor</span>
+          <h2 className="title">
+            A reserve, a bell, and an <em>open ledger.</em>
+          </h2>
+          <p className="lede">
+            Approved bidders only. Reserve is published before the bell. Every accepted bid is timestamped and broadcast to the floor; the ledger is the record of truth.
+          </p>
         </div>
-        <form
-          className="contact-form"
-          onSubmit={submitContact}
-        >
-          <label>
-            Name
-            <input name="name" autoComplete="name" required />
-          </label>
-          <label>
-            Email
-            <input name="email" type="email" autoComplete="email" required />
-          </label>
-          <label>
-            Phone
-            <input name="phone" autoComplete="tel" />
-          </label>
-          <label>
-            File type
-            <select name="fileType" defaultValue="Auction">
-              <option>Auction</option>
-              <option>For Sale</option>
-              <option>Lease</option>
-              <option>Wanted</option>
-            </select>
-          </label>
-          <label className="full-field">
-            Message
-            <textarea name="message" />
-          </label>
-          <label className="check-row full-field">
-            <input name="consentNewsletter" type="checkbox" />
-            <span>Send market alerts to this email.</span>
-          </label>
-          <button type="submit">
-            <MessageSquare size={18} />
-            Send Inquiry
-            <ChevronRight size={17} />
-          </button>
-          {contactStatus ? <p className="form-status success">{contactStatus}</p> : null}
-          {contactError ? <p className="form-status">{contactError}</p> : null}
-        </form>
+        <div className="floor-grid">
+          <AuctionPanel
+            auction={liveAuction}
+            bids={liveBids}
+            bidderEmail={bidderEmail}
+            isLoading={isAuctionLoading}
+            onBidderEmailChange={setBidderEmail}
+            onBidAccepted={handleBidAccepted}
+          />
+          <BidderRegistration
+            auction={liveAuction}
+            bidderEmail={bidderEmail}
+            onBidderEmailChange={setBidderEmail}
+          />
+        </div>
       </section>
 
-      <footer>
-        <span>Wyatt Farmland Auctions</span>
-        <div className="footer-links">
-          <a href="/bidder-terms/">Bidder terms</a>
-          <a href="mailto:cameron@wyattrealty.ca">
-            Contact
-            <ArrowUpRight size={15} />
-          </a>
+      <section className="band" id="procurement">
+        <div className="sec-head">
+          <span className="sign">§03 &nbsp; Procurement</span>
+          <h2 className="title">
+            Bring a file to the <em>floor.</em>
+          </h2>
+          <p className="lede">
+            Sale, lease, wanted, or auction — Cameron Wyatt files Saskatchewan farmland five days a week. Direct line, direct decision. No pipeline, no committee.
+          </p>
+        </div>
+        <div className="procurement">
+          <div className="agent-card">
+            <div className="agent-portrait" aria-label="Cameron Wyatt portrait"></div>
+            <div className="agent-meta">
+              <span className="pre">The operator</span>
+              <span className="name">Cameron Wyatt</span>
+              <span className="role">
+                — Saskatchewan REALTOR® &amp; principal, Wyatt Realty Group
+              </span>
+              <div className="creds">
+                <div>
+                  <span className="lbl">License</span>
+                  <span>SK · since 2019</span>
+                </div>
+                <div>
+                  <span className="lbl">Direct</span>
+                  <span>Email or text · same-day reply</span>
+                </div>
+                <div>
+                  <span className="lbl">Email</span>
+                  <span>cameron@wyattrealty.ca</span>
+                </div>
+                <div>
+                  <span className="lbl">Based</span>
+                  <span>Regina · Treaty 4 · serving province-wide</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="contact-block">
+            <p className="pre">§03·a &nbsp; The brief</p>
+            <h2>
+              Tell us what you have, or <em>what you want.</em>
+            </h2>
+            <p className="lede">
+              A quarter section to move. A buyer with cash. A multi-section file your last broker couldn&apos;t close. We work files; we don&apos;t print brochures.
+            </p>
+
+            <form className="contact-form" onSubmit={submitContact}>
+              <div className="field">
+                <label htmlFor="ct-name">Name</label>
+                <input id="ct-name" name="name" autoComplete="name" placeholder="Your full name" required />
+              </div>
+              <div className="field">
+                <label htmlFor="ct-phone">Phone</label>
+                <input id="ct-phone" name="phone" autoComplete="tel" placeholder="306 555 0119" />
+              </div>
+              <div className="field full">
+                <label htmlFor="ct-email">Email</label>
+                <input id="ct-email" name="email" type="email" autoComplete="email" placeholder="you@operations.ca" required />
+              </div>
+              <div className="field">
+                <label htmlFor="ct-type">File type</label>
+                <select id="ct-type" name="fileType" defaultValue="Auction">
+                  <option>Auction</option>
+                  <option>For Sale</option>
+                  <option>Lease</option>
+                  <option>Wanted</option>
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="ct-rm">RM or county (if known)</label>
+                <input id="ct-rm" name="rmHint" placeholder="e.g. RM Lipton No. 217" />
+              </div>
+              <div className="field full">
+                <label htmlFor="ct-msg">What&apos;s the file</label>
+                <textarea
+                  id="ct-msg"
+                  name="message"
+                  placeholder="Acres, legal, soil rating, current operator, timing, anything else worth knowing."
+                />
+              </div>
+              <label className="check full">
+                <input name="consentNewsletter" type="checkbox" />
+                <span>Send the weekly Almanac — open files, closed lots, and the next bell.</span>
+              </label>
+              <button className="submit full" type="submit">
+                Send the brief <span className="arrow">→</span>
+              </button>
+              {contactStatus ? <p className="form-status success full">{contactStatus}</p> : null}
+              {contactError ? <p className="form-status full">{contactError}</p> : null}
+            </form>
+
+            <div className="newsletter">
+              <div className="copy">
+                <strong>The Almanac &nbsp; · &nbsp; weekly</strong>
+                One edition each Monday — new lots, sold prices, soil-rating digests, and the auction calendar for the coming bell.
+              </div>
+              <form onSubmit={submitNewsletter}>
+                <input
+                  type="email"
+                  placeholder="you@operations.ca"
+                  value={newsletterEmail}
+                  onChange={(event) => setNewsletterEmail(event.target.value)}
+                  required
+                />
+                <button type="submit">Subscribe →</button>
+                {newsletterStatus ? <p className="form-status success">{newsletterStatus}</p> : null}
+                {newsletterError ? <p className="form-status">{newsletterError}</p> : null}
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer className="colophon" id="almanac">
+        <div className="colo-grid">
+          <div>
+            <div className="colo-statement">
+              <strong>Wyatt Farmland Auctions</strong>
+              A Saskatchewan farmland marketplace — <em>operator-led, built to last,</em> filed weekly out of Regina. Real platform for an active farmland REALTOR®. Not a concept.
+            </div>
+          </div>
+          <div>
+            <h4>The book</h4>
+            <ul>
+              <li>
+                <a href="#inventory">Inventory</a>
+              </li>
+              <li>
+                <a href="#floor">Auction floor</a>
+              </li>
+              <li>
+                <a href="#almanac">Closed lots</a>
+              </li>
+              <li>
+                <a href="#procurement">Wanted files</a>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h4>Bidders</h4>
+            <ul>
+              <li>
+                <a href="#floor">Register</a>
+              </li>
+              <li>
+                <a href="/bidder-terms/">Bidder terms</a>
+              </li>
+              <li>
+                <a href="/bidder-terms/">Deposit instructions</a>
+              </li>
+              <li>
+                <a href="/bidder-terms/">Anti-snipe rule</a>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h4>Office</h4>
+            <ul>
+              <li>
+                <a href="mailto:cameron@wyattrealty.ca">cameron@wyattrealty.ca</a>
+              </li>
+              <li>
+                <a href="#procurement">Wyatt Realty Group</a>
+              </li>
+              <li>
+                <a href="#procurement">Firesky Resorts Ltd.</a>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div className="colo-bottom">
+          <div>© {new Date().getFullYear()} Wyatt Farmland Auctions Inc. · Regina · SK</div>
+          <div className="center">
+            — <em>Operator-led. Built to last.</em> —
+          </div>
+          <div className="right">Set in Newsreader, IBM Plex Sans &amp; Mono</div>
         </div>
       </footer>
     </main>
   );
 }
+

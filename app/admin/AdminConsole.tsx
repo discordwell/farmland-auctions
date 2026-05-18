@@ -1,23 +1,5 @@
 "use client";
 
-import {
-  ArrowLeft,
-  BadgeCheck,
-  ClipboardList,
-  FilePlus2,
-  Gavel,
-  KeyRound,
-  LayoutDashboard,
-  Mail,
-  Pause,
-  Play,
-  Plus,
-  RefreshCcw,
-  ShieldCheck,
-  Square,
-  UsersRound
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Dashboard = {
@@ -132,8 +114,6 @@ const money = new Intl.NumberFormat("en-CA", {
   style: "currency"
 });
 
-type MetricItem = [string, number, LucideIcon];
-
 function dateTimeLocal(offsetMinutes: number) {
   const date = new Date(Date.now() + offsetMinutes * 60_000);
   date.setSeconds(0, 0);
@@ -160,6 +140,7 @@ export function AdminConsole() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [status, setStatus] = useState("");
   const [selectedAuctionId, setSelectedAuctionId] = useState("");
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const selectedAuction = useMemo(
     () => auctions.find((auction) => auction.id === selectedAuctionId) ?? auctions[0],
@@ -197,9 +178,11 @@ export function AdminConsole() {
       setStatus("Admin key required");
       return;
     }
+    if (isSyncing) return;
 
     window.localStorage.setItem("farmauction-admin-key", apiKey);
-    setStatus("Loading");
+    setIsSyncing(true);
+    setStatus("Syncing");
     try {
       const [
         dashboardPayload,
@@ -235,6 +218,8 @@ export function AdminConsole() {
       }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Admin request failed");
+    } finally {
+      setIsSyncing(false);
     }
   }
 
@@ -323,7 +308,10 @@ export function AdminConsole() {
     await loadAdmin();
   }
 
-  async function submitBidderDecision(event: FormEvent<HTMLFormElement>, authorization: Authorization) {
+  async function submitBidderDecision(
+    event: FormEvent<HTMLFormElement>,
+    authorization: Authorization
+  ) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     await adminFetch(
@@ -360,67 +348,86 @@ export function AdminConsole() {
     setNotifications(payload.notifications);
   }
 
+  const metrics: Array<{ lbl: string; val: string | number; foot?: string }> = [
+    { lbl: "Listings on book", val: dashboard?.listing_count ?? 0, foot: "Inventory CMS" },
+    { lbl: "Open auctions", val: dashboard?.open_auction_count ?? 0, foot: "Bell active" },
+    { lbl: "Bidders", val: dashboard?.bidder_count ?? 0, foot: "Authorized accounts" },
+    { lbl: "Accepted bids", val: dashboard?.accepted_bid_count ?? 0, foot: "Recorded to ledger" },
+    { lbl: "Inquiries", val: dashboard?.inquiry_count ?? 0, foot: "Procurement intake" }
+  ];
+
   return (
     <main className="admin-page">
       <header className="admin-header">
-        <a className="brand" href="/">
-          <span className="brand-mark">
-            <ArrowLeft size={18} />
-          </span>
-          <span>
-            <strong>Wyatt</strong>
-            <small>Admin Console</small>
+        <a className="wordmark" href="/" aria-label="Back to the public floor">
+          <span className="mark">W</span>
+          <span className="lockup">
+            <span className="name">Wyatt</span>
+            <span className="sub">Operator console · Internal</span>
           </span>
         </a>
+        <div className="edition" style={{ background: "transparent", color: "var(--ink)", padding: 0, gridTemplateColumns: "1fr", justifyContent: "center" }}>
+          <div className="center" style={{ color: "var(--mute)" }}>
+            <span>§ Operator console · Regina, SK · Treaty 4</span>
+          </div>
+        </div>
         <div className="admin-key">
-          <KeyRound size={17} />
+          <span>Admin key</span>
           <input
             aria-label="Admin API key"
             onChange={(event) => setApiKey(event.target.value)}
-            placeholder="Admin key"
+            placeholder="Paste key"
             type="password"
             value={apiKey}
           />
-          <button className="primary-button" onClick={loadAdmin} type="button">
-            <RefreshCcw size={17} />
-            Sync
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={loadAdmin}
+            type="button"
+            disabled={isSyncing}
+          >
+            {isSyncing ? "Syncing" : "Sync"} <span className="arrow">→</span>
           </button>
         </div>
       </header>
 
       <section className="admin-shell">
-        <div className="section-head">
-          <div>
-            <p className="eyebrow">Operator console</p>
-            <h1>Brokerage command center</h1>
-          </div>
+        <div className="admin-head">
+          <span className="sign">§00 &nbsp; Brokerage command</span>
+          <h1 className="title">
+            Operator <em>console</em> — the working desk behind the bell.
+          </h1>
+          <p className="lede">
+            Listings, live auctions, bidder approvals, and post-close workflow. Every action writes to the audit ledger.
+          </p>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
           <span className="admin-status">{status || "Ready"}</span>
         </div>
 
         <div className="admin-metrics">
-          {([
-            ["Listings", dashboard?.listing_count ?? 0, FilePlus2],
-            ["Open auctions", dashboard?.open_auction_count ?? 0, Gavel],
-            ["Bidders", dashboard?.bidder_count ?? 0, UsersRound],
-            ["Accepted bids", dashboard?.accepted_bid_count ?? 0, BadgeCheck],
-            ["Inquiries", dashboard?.inquiry_count ?? 0, Mail]
-          ] satisfies MetricItem[]).map(([label, value, Icon]) => (
-            <div className="admin-metric" key={String(label)}>
-              <Icon size={19} />
-              <strong>{String(value)}</strong>
-              <span>{String(label)}</span>
+          {metrics.map((metric) => (
+            <div className="admin-metric" key={metric.lbl}>
+              <div className="lbl">
+                {metric.lbl} <span className="pip">§</span>
+              </div>
+              <div className="val figure">{metric.val}</div>
+              <div className="foot">{metric.foot}</div>
             </div>
           ))}
         </div>
 
         <section className="admin-grid">
-          <article className="admin-panel wide">
-            <div className="panel-head compact">
+          <article className="admin-panel">
+            <div className="admin-panel-head">
               <div>
-                <p className="eyebrow">Listings CMS</p>
-                <h2>Create listing</h2>
+                <p className="pre">§A · Inventory CMS</p>
+                <h2>
+                  Create <em>listing</em>
+                </h2>
               </div>
-              <FilePlus2 size={20} />
+              <span className="ornament">Form · 14 fields</span>
             </div>
             <form className="admin-form" onSubmit={submitListing}>
               <input name="title" placeholder="Title" required />
@@ -445,27 +452,30 @@ export function AdminConsole() {
                 <option>Lease</option>
               </select>
               <input name="image" defaultValue="/images/hero-fields.jpg" placeholder="Hero image" />
-              <input name="satellite" defaultValue="/images/satellite-fields.jpg" placeholder="Satellite image" />
+              <input
+                name="satellite"
+                defaultValue="/images/satellite-fields.jpg"
+                placeholder="Satellite image"
+              />
               <textarea name="description" placeholder="Description" />
               <textarea name="highlights" placeholder="Highlights, one per line" />
               <label className="admin-check">
                 <input name="publish" type="checkbox" />
-                Publish
+                Publish to the book
               </label>
-              <button type="submit">
-                <Plus size={17} />
-                Add Listing
-              </button>
+              <button type="submit">Add listing →</button>
             </form>
           </article>
 
           <article className="admin-panel">
-            <div className="panel-head compact">
+            <div className="admin-panel-head">
               <div>
-                <p className="eyebrow">Auction control</p>
-                <h2>Create auction</h2>
+                <p className="pre">§B · Auction control</p>
+                <h2>
+                  Create <em>auction</em>
+                </h2>
               </div>
-              <Gavel size={20} />
+              <span className="ornament">Bell · Reserve · Bid</span>
             </div>
             <form className="admin-form stacked" onSubmit={submitAuction}>
               <select name="listingId" required>
@@ -487,86 +497,122 @@ export function AdminConsole() {
               </select>
               <input name="opensAt" defaultValue={dateTimeLocal(15)} type="datetime-local" />
               <input name="closesAt" defaultValue={dateTimeLocal(180)} type="datetime-local" />
-              <input name="bidIncrement" defaultValue="25000" placeholder="Bid increment" type="number" />
-              <input name="reservePrice" defaultValue="0" placeholder="Reserve price" type="number" />
-              <input name="softCloseSeconds" defaultValue="300" placeholder="Soft close seconds" type="number" />
+              <input
+                name="bidIncrement"
+                defaultValue="25000"
+                placeholder="Bid increment"
+                type="number"
+              />
+              <input
+                name="reservePrice"
+                defaultValue="0"
+                placeholder="Reserve price"
+                type="number"
+              />
+              <input
+                name="softCloseSeconds"
+                defaultValue="300"
+                placeholder="Soft close seconds"
+                type="number"
+              />
               <select name="reserveVisibility" defaultValue="met-only">
                 <option value="met-only">Reserve met only</option>
                 <option value="hidden">Hidden</option>
                 <option value="public">Public</option>
               </select>
-              <button type="submit">
-                <Plus size={17} />
-                Add Auction
-              </button>
+              <button type="submit">Add auction →</button>
             </form>
           </article>
         </section>
 
         <section className="admin-grid">
-          <article className="admin-panel wide">
-            <div className="panel-head compact">
+          <article className="admin-panel">
+            <div className="admin-panel-head">
               <div>
-                <p className="eyebrow">Inventory</p>
-                <h2>Listings</h2>
+                <p className="pre">§C · Inventory</p>
+                <h2>The book</h2>
               </div>
-              <LayoutDashboard size={20} />
+              <span className="ornament">{listings.length} files</span>
             </div>
             <div className="admin-table">
-              {listings.map((listing) => (
-                <div className="admin-row" key={listing.id}>
-                  <div>
-                    <strong>{listing.title}</strong>
-                    <span>
-                      {listing.rm} · {listing.acres} acres · soil {listing.soilRating}
-                    </span>
+              {listings.length ? (
+                listings.map((listing) => (
+                  <div className="admin-row" key={listing.id}>
+                    <div>
+                      <strong>{listing.title}</strong>
+                      <span>
+                        {listing.rm} · {listing.acres} ac · soil {listing.soilRating} · {money.format(listing.pricePerAcre)}/ac
+                      </span>
+                    </div>
+                    <em>{listing.publishedAt ? listing.status : "Draft"}</em>
                   </div>
-                  <em>{listing.publishedAt ? listing.status : "Draft"}</em>
-                </div>
-              ))}
+                ))
+              ) : (
+                <div className="admin-empty">No listings yet — sync after adding the admin key.</div>
+              )}
             </div>
           </article>
 
           <article className="admin-panel">
-            <div className="panel-head compact">
+            <div className="admin-panel-head">
               <div>
-                <p className="eyebrow">Live files</p>
+                <p className="pre">§D · Live files</p>
                 <h2>Auctions</h2>
               </div>
-              <ClipboardList size={20} />
+              <span className="ornament">{auctions.length} on roll</span>
             </div>
             <div className="admin-table">
-              {auctions.map((auction) => (
-                <div className="admin-row stacked-row" key={auction.id}>
-                  <div>
-                    <strong>{auction.title}</strong>
-                    <span>
-                      {auction.status} · {money.format(auction.currentHighBidDollars)}
-                    </span>
+              {auctions.length ? (
+                auctions.map((auction) => (
+                  <div className="admin-row stacked" key={auction.id}>
+                    <div>
+                      <strong>{auction.title}</strong>
+                      <span>
+                        {auction.status.toUpperCase()} · high {money.format(auction.currentHighBidDollars)} · reserve {auction.reserveMet ? "met" : "pending"}
+                      </span>
+                    </div>
+                    <div className="admin-actions">
+                      <button
+                        className="subtle"
+                        onClick={() => setAuctionStatus(auction.id, "open")}
+                        title="Open"
+                        type="button"
+                      >
+                        Open
+                      </button>
+                      <button
+                        className="subtle"
+                        onClick={() => setAuctionStatus(auction.id, "paused")}
+                        title="Pause"
+                        type="button"
+                      >
+                        Pause
+                      </button>
+                      <button
+                        onClick={() => closeAuction(auction.id)}
+                        title="Close the bell"
+                        type="button"
+                      >
+                        Close
+                      </button>
+                    </div>
                   </div>
-                  <div className="admin-actions">
-                    <button onClick={() => setAuctionStatus(auction.id, "open")} title="Open">
-                      <Play size={15} />
-                    </button>
-                    <button onClick={() => setAuctionStatus(auction.id, "paused")} title="Pause">
-                      <Pause size={15} />
-                    </button>
-                    <button onClick={() => closeAuction(auction.id)} title="Close">
-                      <Square size={15} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <div className="admin-empty">No auctions yet.</div>
+              )}
             </div>
           </article>
         </section>
 
         <section className="admin-grid">
-          <article className="admin-panel wide">
-            <div className="panel-head compact">
+          <article className="admin-panel">
+            <div className="admin-panel-head">
               <div>
-                <p className="eyebrow">Bidder approvals</p>
-                <h2>Authorization queue</h2>
+                <p className="pre">§E · Bidder approvals</p>
+                <h2>
+                  Authorization <em>queue</em>
+                </h2>
               </div>
               <select
                 aria-label="Auction authorization queue"
@@ -585,183 +631,244 @@ export function AdminConsole() {
               </select>
             </div>
             <div className="admin-table">
-              {authorizations.map((authorization) => (
-                <div className="admin-row stacked-row" key={`${authorization.auction_id}-${authorization.bidder_id}`}>
-                  <div>
-                    <strong>{authorization.legal_name}</strong>
-                    <span>
-                      {authorization.email} · {authorization.entity_type} · {authorization.status} · {authorization.deposit_status}
-                    </span>
-                    <span>
-                      Verification {authorization.verification_status} · Terms {authorization.terms_version}
-                    </span>
-                    {authorization.deposit_reference ? <span>Deposit: {authorization.deposit_reference}</span> : null}
-                    {authorization.proof_of_funds_url || authorization.bidder_proof_of_funds_url ? (
+              {authorizations.length ? (
+                authorizations.map((authorization) => (
+                  <div
+                    className="admin-row stacked"
+                    key={`${authorization.auction_id}-${authorization.bidder_id}`}
+                  >
+                    <div>
+                      <strong>{authorization.legal_name}</strong>
                       <span>
-                        Proof: {authorization.proof_of_funds_url || authorization.bidder_proof_of_funds_url}
+                        {authorization.email} · {authorization.entity_type} · {authorization.status} · deposit {authorization.deposit_status}
                       </span>
-                    ) : null}
-                    {authorization.identity_document_url ? <span>ID: {authorization.identity_document_url}</span> : null}
-                    {authorization.bidder_notes ? <span>Notes: {authorization.bidder_notes}</span> : null}
+                      <span>
+                        ID {authorization.verification_status} · Terms {authorization.terms_version}
+                      </span>
+                      {authorization.deposit_reference ? (
+                        <span>Deposit ref · {authorization.deposit_reference}</span>
+                      ) : null}
+                      {authorization.proof_of_funds_url || authorization.bidder_proof_of_funds_url ? (
+                        <span>
+                          Proof · {authorization.proof_of_funds_url || authorization.bidder_proof_of_funds_url}
+                        </span>
+                      ) : null}
+                      {authorization.identity_document_url ? (
+                        <span>ID · {authorization.identity_document_url}</span>
+                      ) : null}
+                      {authorization.bidder_notes ? <span>Notes · {authorization.bidder_notes}</span> : null}
+                    </div>
+                    <form
+                      className="admin-inline-form"
+                      onSubmit={(event) => submitBidderDecision(event, authorization)}
+                    >
+                      <select name="status" defaultValue={authorization.status}>
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="suspended">Suspended</option>
+                      </select>
+                      <select name="depositStatus" defaultValue={authorization.deposit_status}>
+                        <option value="not_required">No deposit</option>
+                        <option value="pending">Deposit pending</option>
+                        <option value="verified">Deposit verified</option>
+                        <option value="waived">Deposit waived</option>
+                      </select>
+                      <select
+                        name="verificationStatus"
+                        defaultValue={authorization.verification_status}
+                      >
+                        <option value="pending">ID pending</option>
+                        <option value="approved">ID approved</option>
+                        <option value="rejected">ID rejected</option>
+                      </select>
+                      <input
+                        name="maxBid"
+                        placeholder="Max bid"
+                        type="number"
+                        defaultValue={
+                          authorization.max_bid_cents
+                            ? Number(authorization.max_bid_cents) / 100
+                            : ""
+                        }
+                      />
+                      <input
+                        name="operatorNotes"
+                        placeholder="Operator notes"
+                        defaultValue={authorization.operator_notes}
+                      />
+                      <button type="submit">Save decision</button>
+                    </form>
                   </div>
-                  <form className="admin-inline-form" onSubmit={(event) => submitBidderDecision(event, authorization)}>
-                    <select name="status" defaultValue={authorization.status}>
-                      <option value="pending">Pending</option>
-                      <option value="approved">Approved</option>
-                      <option value="rejected">Rejected</option>
-                      <option value="suspended">Suspended</option>
-                    </select>
-                    <select name="depositStatus" defaultValue={authorization.deposit_status}>
-                      <option value="not_required">No deposit</option>
-                      <option value="pending">Deposit pending</option>
-                      <option value="verified">Deposit verified</option>
-                      <option value="waived">Deposit waived</option>
-                    </select>
-                    <select name="verificationStatus" defaultValue={authorization.verification_status}>
-                      <option value="pending">ID pending</option>
-                      <option value="approved">ID approved</option>
-                      <option value="rejected">ID rejected</option>
-                    </select>
-                    <input
-                      name="maxBid"
-                      placeholder="Max bid"
-                      type="number"
-                      defaultValue={authorization.max_bid_cents ? Number(authorization.max_bid_cents) / 100 : ""}
-                    />
-                    <input
-                      name="operatorNotes"
-                      placeholder="Operator notes"
-                      defaultValue={authorization.operator_notes}
-                    />
-                    <button type="submit">
-                      <ShieldCheck size={15} />
-                      Save
-                    </button>
-                  </form>
-                </div>
-              ))}
+                ))
+              ) : (
+                <div className="admin-empty">No applications for the selected auction.</div>
+              )}
             </div>
           </article>
 
           <article className="admin-panel">
-            <div className="panel-head compact">
+            <div className="admin-panel-head">
               <div>
-                <p className="eyebrow">Leads</p>
+                <p className="pre">§F · Leads</p>
                 <h2>Inquiries</h2>
               </div>
-              <Mail size={20} />
+              <span className="ornament">{inquiries.length} on file</span>
             </div>
             <div className="admin-table">
-              {inquiries.map((inquiry) => (
-                <div className="admin-row" key={inquiry.id}>
-                  <div>
-                    <strong>{inquiry.name}</strong>
-                    <span>
-                      {inquiry.file_type} · {inquiry.email}
-                    </span>
+              {inquiries.length ? (
+                inquiries.map((inquiry) => (
+                  <div className="admin-row" key={inquiry.id}>
+                    <div>
+                      <strong>{inquiry.name}</strong>
+                      <span>
+                        {inquiry.file_type} · {inquiry.email}
+                      </span>
+                    </div>
+                    <em>{formatDate(inquiry.created_at)}</em>
                   </div>
-                  <em>{formatDate(inquiry.created_at)}</em>
-                </div>
-              ))}
-            </div>
-          </article>
-        </section>
-
-        <section className="admin-grid">
-          <article className="admin-panel wide">
-            <div className="panel-head compact">
-              <div>
-                <p className="eyebrow">Close workflow</p>
-                <h2>Post-auction tasks</h2>
-              </div>
-              <ClipboardList size={20} />
-            </div>
-            <div className="admin-table">
-              {tasks.map((task) => (
-                <div className="admin-row" key={task.id}>
-                  <div>
-                    <strong>{task.title}</strong>
-                    <span>
-                      {task.assignee_role} · {task.due_at ? formatDate(task.due_at) : "No due date"}
-                    </span>
-                  </div>
-                  <div className="admin-actions">
-                    <button onClick={() => updateTaskStatus(task.id, "open")}>Open</button>
-                    <button onClick={() => updateTaskStatus(task.id, "blocked")}>Blocked</button>
-                    <button onClick={() => updateTaskStatus(task.id, "done")}>Done</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </article>
-
-          <article className="admin-panel">
-            <div className="panel-head compact">
-              <div>
-                <p className="eyebrow">Notifications</p>
-                <h2>Outbox</h2>
-              </div>
-              <Mail size={20} />
-            </div>
-            <div className="admin-table">
-              {notifications.map((notification) => (
-                <div className="admin-row stacked-row" key={notification.id}>
-                  <div>
-                    <strong>{notification.subject}</strong>
-                    <span>
-                      {notification.recipient_email} · {notification.event_type} · {notification.status}
-                    </span>
-                    {notification.last_error ? <span>{notification.last_error}</span> : null}
-                  </div>
-                  <div className="admin-actions">
-                    <button onClick={() => resendNotification(notification.id)}>Send</button>
-                  </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <div className="admin-empty">No inquiries yet.</div>
+              )}
             </div>
           </article>
         </section>
 
         <section className="admin-grid">
           <article className="admin-panel">
-            <div className="panel-head compact">
+            <div className="admin-panel-head">
               <div>
-                <p className="eyebrow">Newsletter</p>
+                <p className="pre">§G · Close workflow</p>
+                <h2>
+                  Post-auction <em>tasks</em>
+                </h2>
+              </div>
+              <span className="ornament">{tasks.length} active</span>
+            </div>
+            <div className="admin-table">
+              {tasks.length ? (
+                tasks.map((task) => (
+                  <div className="admin-row" key={task.id}>
+                    <div>
+                      <strong>{task.title}</strong>
+                      <span>
+                        {task.assignee_role} · {task.due_at ? formatDate(task.due_at) : "No due date"}
+                      </span>
+                    </div>
+                    <div className="admin-actions">
+                      <button
+                        className="subtle"
+                        onClick={() => updateTaskStatus(task.id, "open")}
+                        type="button"
+                      >
+                        Open
+                      </button>
+                      <button
+                        className="subtle"
+                        onClick={() => updateTaskStatus(task.id, "blocked")}
+                        type="button"
+                      >
+                        Blocked
+                      </button>
+                      <button onClick={() => updateTaskStatus(task.id, "done")} type="button">
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="admin-empty">No tasks for the selected auction.</div>
+              )}
+            </div>
+          </article>
+
+          <article className="admin-panel">
+            <div className="admin-panel-head">
+              <div>
+                <p className="pre">§H · Outbox</p>
+                <h2>Notifications</h2>
+              </div>
+              <span className="ornament">{notifications.length} queued</span>
+            </div>
+            <div className="admin-table">
+              {notifications.length ? (
+                notifications.map((notification) => (
+                  <div className="admin-row stacked" key={notification.id}>
+                    <div>
+                      <strong>{notification.subject}</strong>
+                      <span>
+                        {notification.recipient_email} · {notification.event_type} · {notification.status}
+                      </span>
+                      {notification.last_error ? <span>{notification.last_error}</span> : null}
+                    </div>
+                    <div className="admin-actions">
+                      <button
+                        onClick={() => resendNotification(notification.id)}
+                        type="button"
+                      >
+                        Send
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="admin-empty">Outbox is clear.</div>
+              )}
+            </div>
+          </article>
+        </section>
+
+        <section className="admin-grid">
+          <article className="admin-panel">
+            <div className="admin-panel-head">
+              <div>
+                <p className="pre">§I · Newsletter</p>
                 <h2>Consent log</h2>
               </div>
-              <Mail size={20} />
+              <span className="ornament">{signups.length} subscribers</span>
             </div>
             <div className="admin-table">
-              {signups.map((signup) => (
-                <div className="admin-row" key={signup.id}>
-                  <div>
-                    <strong>{signup.email}</strong>
-                    <span>{signup.consent_source}</span>
+              {signups.length ? (
+                signups.map((signup) => (
+                  <div className="admin-row" key={signup.id}>
+                    <div>
+                      <strong>{signup.email}</strong>
+                      <span>{signup.consent_source}</span>
+                    </div>
+                    <em>{formatDate(signup.consent_at)}</em>
                   </div>
-                  <em>{formatDate(signup.consent_at)}</em>
-                </div>
-              ))}
+                ))
+              ) : (
+                <div className="admin-empty">No subscribers yet.</div>
+              )}
             </div>
           </article>
 
-          <article className="admin-panel wide">
-            <div className="panel-head compact">
+          <article className="admin-panel">
+            <div className="admin-panel-head">
               <div>
-                <p className="eyebrow">Audit</p>
-                <h2>Event ledger</h2>
+                <p className="pre">§J · Audit</p>
+                <h2>
+                  Event <em>ledger</em>
+                </h2>
               </div>
-              <ClipboardList size={20} />
+              <span className="ornament">{events.length} events</span>
             </div>
             <div className="admin-table">
-              {events.map((event) => (
-                <div className="admin-row" key={event.id}>
-                  <div>
-                    <strong>{event.event_type}</strong>
-                    <span>{event.actor_type}</span>
+              {events.length ? (
+                events.map((event) => (
+                  <div className="admin-row" key={event.id}>
+                    <div>
+                      <strong>{event.event_type}</strong>
+                      <span>{event.actor_type}</span>
+                    </div>
+                    <em>{formatDate(event.created_at)}</em>
                   </div>
-                  <em>{formatDate(event.created_at)}</em>
-                </div>
-              ))}
+                ))
+              ) : (
+                <div className="admin-empty">Ledger is empty — no recorded events.</div>
+              )}
             </div>
           </article>
         </section>

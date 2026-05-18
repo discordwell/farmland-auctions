@@ -7,4 +7,5 @@ dist-api
 !.env.example
 .DS_Store
 *.log
+*.tsbuildinfo
 FARMLAND_AUCTIONS_SPEC.local.md
