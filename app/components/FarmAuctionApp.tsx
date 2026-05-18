@@ -124,6 +124,24 @@ function formatLotNumber(index: number) {
   return String(index + 1).padStart(3, "0");
 }
 
+function primaryLandUse(listing: Listing): string {
+  const total = Math.max(1, listing.acres);
+  const buckets: Array<[string, number]> = [
+    ["Cultivated", listing.acresCultivated ?? 0],
+    ["Pasture", listing.acresPasture ?? 0],
+    ["Hayland", listing.acresHayland ?? 0],
+    ["Bush", listing.acresBush ?? 0],
+    ["Yard", listing.acresYard ?? 0]
+  ];
+  buckets.sort((a, b) => b[1] - a[1]);
+  const [topLabel, topAcres] = buckets[0];
+  if (topAcres <= 0) return listing.status === "Wanted" ? "Seeking" : "Mixed use";
+  const pct = Math.round((topAcres / total) * 100);
+  if (pct >= 90) return topLabel;
+  if (pct >= 60) return `Mostly ${topLabel.toLowerCase()}`;
+  return "Mixed use";
+}
+
 function CompassRose() {
   return (
     <svg className="compass" viewBox="0 0 60 60" fill="none" stroke="currentColor" strokeWidth="1">
@@ -212,7 +230,7 @@ function LotCard({
         </div>
       </dl>
       <div className="lot-soil">
-        <span className="lbl">{listing.type}</span>
+        <span className="lbl">{primaryLandUse(listing)}</span>
         <div className="bar">
           <div className="fill" style={{ right: `${soilGap}%` }}></div>
         </div>
@@ -789,7 +807,6 @@ export function FarmAuctionApp() {
   const { user, status: authStatus, signOut } = useAuth();
   const [status, setStatus] = useState<Array<ListingStatus | "All">>(["All"]);
   const [region, setRegion] = useState("All");
-  const [propertyType, setPropertyType] = useState("All");
   const [minAcres, setMinAcres] = useState("");
   const [minSoilRating, setMinSoilRating] = useState("");
   const [maxPricePerAcre, setMaxPricePerAcre] = useState("");
@@ -996,7 +1013,6 @@ export function FarmAuctionApp() {
         setStatus(["All"]);
       }
       setRegion(get("region") || "All");
-      setPropertyType(get("type") || "All");
       setMinAcres(get("minAcres") || "");
       setMinSoilRating(get("minSoil") || "");
       setMaxPricePerAcre(get("maxPpa") || "");
@@ -1024,7 +1040,6 @@ export function FarmAuctionApp() {
     const params = new URLSearchParams();
     if (status.length && !status.includes("All")) params.set("status", status.join(","));
     if (region !== "All") params.set("region", region);
-    if (propertyType !== "All") params.set("type", propertyType);
     if (minAcres) params.set("minAcres", minAcres);
     if (minSoilRating) params.set("minSoil", minSoilRating);
     if (maxPricePerAcre) params.set("maxPpa", maxPricePerAcre);
@@ -1035,7 +1050,7 @@ export function FarmAuctionApp() {
     if (newUrl !== window.location.pathname + window.location.search + window.location.hash) {
       window.history.replaceState(null, "", newUrl);
     }
-  }, [status, region, propertyType, minAcres, minSoilRating, maxPricePerAcre, searchQuery, sortKey]);
+  }, [status, region, minAcres, minSoilRating, maxPricePerAcre, searchQuery, sortKey]);
 
   async function submitContact(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1096,7 +1111,6 @@ export function FarmAuctionApp() {
     const filtered = backendListings.filter((listing) => {
       const statusMatch = status.includes("All") || status.includes(listing.status);
       const regionMatch = region === "All" || region === listing.region;
-      const typeMatch = propertyType === "All" || listing.type === propertyType;
       const acresMatch = !minAcres || listing.acres >= Number(minAcres);
       const soilMatch = !minSoilRating || listing.soilRating >= Number(minSoilRating);
       const priceMatch = !maxPricePerAcre || listing.pricePerAcre <= Number(maxPricePerAcre);
@@ -1105,7 +1119,7 @@ export function FarmAuctionApp() {
         listing.title.toLowerCase().includes(lc) ||
         listing.rm.toLowerCase().includes(lc) ||
         listing.region.toLowerCase().includes(lc);
-      return statusMatch && regionMatch && typeMatch && acresMatch && soilMatch && priceMatch && queryMatch;
+      return statusMatch && regionMatch && acresMatch && soilMatch && priceMatch && queryMatch;
     });
     switch (sortKey) {
       case "ppa-asc":
@@ -1123,7 +1137,6 @@ export function FarmAuctionApp() {
     backendListings,
     status,
     region,
-    propertyType,
     minAcres,
     minSoilRating,
     maxPricePerAcre,
@@ -1134,7 +1147,6 @@ export function FarmAuctionApp() {
   const hasActiveFilters =
     !status.includes("All") ||
     region !== "All" ||
-    propertyType !== "All" ||
     Boolean(minAcres) ||
     Boolean(minSoilRating) ||
     Boolean(maxPricePerAcre) ||
@@ -1144,7 +1156,6 @@ export function FarmAuctionApp() {
   function resetFilters() {
     setStatus(["All"]);
     setRegion("All");
-    setPropertyType("All");
     setMinAcres("");
     setMinSoilRating("");
     setMaxPricePerAcre("");
@@ -1154,10 +1165,6 @@ export function FarmAuctionApp() {
 
   const regionOptions = useMemo(
     () => ["All", ...Array.from(new Set(backendListings.map((listing) => listing.region))).sort()],
-    [backendListings]
-  );
-  const typeOptions = useMemo(
-    () => ["All", ...Array.from(new Set(backendListings.map((listing) => listing.type))).sort()],
     [backendListings]
   );
 
@@ -1507,14 +1514,6 @@ export function FarmAuctionApp() {
               <span>Region</span>
               <select value={region} onChange={(event) => setRegion(event.target.value)}>
                 {regionOptions.map((item) => (
-                  <option key={item}>{item}</option>
-                ))}
-              </select>
-            </label>
-            <label className="select-pill">
-              <span>Type</span>
-              <select value={propertyType} onChange={(event) => setPropertyType(event.target.value)}>
-                {typeOptions.map((item) => (
                   <option key={item}>{item}</option>
                 ))}
               </select>

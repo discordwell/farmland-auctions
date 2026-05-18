@@ -256,6 +256,11 @@ export function AdminConsole() {
     await adminFetch("/api/admin/listings", {
       body: JSON.stringify({
         acres: data.get("acres"),
+        acresCultivated: data.get("acresCultivated") || 0,
+        acresPasture: data.get("acresPasture") || 0,
+        acresHayland: data.get("acresHayland") || 0,
+        acresBush: data.get("acresBush") || 0,
+        acresYard: data.get("acresYard") || 0,
         avgAssessment: data.get("avgAssessment"),
         description: data.get("description"),
         highlights: String(data.get("highlights") ?? "")
@@ -271,6 +276,7 @@ export function AdminConsole() {
             return { url: url.trim(), caption: captionParts.join("|").trim() };
           }),
         image: data.get("image"),
+        legalDescription: data.get("legalDescription") ?? "",
         pricePerAcre: data.get("pricePerAcre"),
         publish: data.get("publish") === "on",
         region: data.get("region"),
@@ -280,7 +286,6 @@ export function AdminConsole() {
         soilRating: data.get("soilRating"),
         status: data.get("status"),
         title: data.get("title"),
-        type: data.get("type"),
         latitude: data.get("latitude") || undefined,
         longitude: data.get("longitude") || undefined,
         waterSource: data.get("waterSource") ?? "",
@@ -518,13 +523,7 @@ export function AdminConsole() {
               <input name="acres" placeholder="Title acres" required type="number" step="0.1" />
               <input name="pricePerAcre" placeholder="Price per acre" required type="number" />
               <input name="avgAssessment" placeholder="Avg. AV / quarter" required type="number" />
-              <input name="soilRating" placeholder="Soil rating" required type="number" />
-              <select name="type" defaultValue="Grain">
-                <option>Grain</option>
-                <option>Mixed</option>
-                <option>Pasture</option>
-                <option>Lease</option>
-              </select>
+              <input name="soilRating" placeholder="Soil rating (0–100)" required type="number" />
               <select name="status" defaultValue="For Sale">
                 <option>For Sale</option>
                 <option>Pending</option>
@@ -532,8 +531,19 @@ export function AdminConsole() {
                 <option>Wanted</option>
                 <option>Lease</option>
               </select>
+              <input
+                name="legalDescription"
+                placeholder="Legal land description (e.g. SE-14-22-19 W2)"
+              />
               <input name="latitude" placeholder="Latitude (decimal)" type="number" step="0.0001" />
               <input name="longitude" placeholder="Longitude (decimal, negative for W)" type="number" step="0.0001" />
+
+              <div className="admin-form-divider">Acres composition (totals should sum to title acres)</div>
+              <input name="acresCultivated" placeholder="Cultivated acres" type="number" step="0.1" defaultValue="0" />
+              <input name="acresPasture" placeholder="Pasture acres" type="number" step="0.1" defaultValue="0" />
+              <input name="acresHayland" placeholder="Hayland acres" type="number" step="0.1" defaultValue="0" />
+              <input name="acresBush" placeholder="Bush / slough acres" type="number" step="0.1" defaultValue="0" />
+              <input name="acresYard" placeholder="Yard site acres" type="number" step="0.1" defaultValue="0" />
               <input name="image" defaultValue="/images/hero-fields.jpg" placeholder="Hero image" />
               <input
                 name="satellite"

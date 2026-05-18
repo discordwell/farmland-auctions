@@ -1,0 +1,230 @@
+{
+  "generated_at": "2026-05-18T21:56:46.359Z",
+  "style": "Painterly aerial view of a Saskatchewan farmland parcel. Editorial-cartographic aesthetic — hand-painted gouache with a soft etched-paper feel, not photoreal. Sun-bleached prairie palette: muted ochres, wheat golds, brown chernozem soil, prairie sage, deep ink shadows. Township grid lines barely visible like an old land-survey plate. Single quarter section centered. Sweeping horizon line, big prairie sky, low sun. No people, no text, no logos, no UI.",
+  "aspect_ratio": "3:2",
+  "notes": [
+    "Drive these prompts through the ChatGPT web interface (logged-in session).",
+    "Pattern: HYPERDRAFT/scripts/_mnr_image_helper.py + _mnr_make_js.py",
+    "Save each generated PNG into public/images/lots/<output_file> at >=10KB"
+  ],
+  "entries": [
+    {
+      "id": "hero",
+      "output_file": "hero.png",
+      "prompt": "Painterly aerial view of a Saskatchewan farmland parcel. Editorial-cartographic aesthetic — hand-painted gouache with a soft etched-paper feel, not photoreal. Sun-bleached prairie palette: muted ochres, wheat golds, brown chernozem soil, prairie sage, deep ink shadows. Township grid lines barely visible like an old land-survey plate. Single quarter section centered. Sweeping horizon line, big prairie sky, low sun. No people, no text, no logos, no UI. Subject: a wide Saskatchewan farmland horizon at the golden hour — three quarter-sections receding to a low prairie horizon. Visible elements: a long gravel grid road, a single grain bin clustered with a shelter belt of poplars on the right, fields banded green-gold-brown for canola-wheat-summerfallow rotation, a sliver of slough water reflecting the sky. Mood: editorial, patient, considered. No people. No text. The kind of scene printed at the head of an almanac. Aspect ratio 3:2.",
+      "meta": {
+        "kind": "hero"
+      }
+    },
+    {
+      "id": "lipton-half-section",
+      "output_file": "lipton-half-section.png",
+      "prompt": "Painterly aerial view of a Saskatchewan farmland parcel. Editorial-cartographic aesthetic — hand-painted gouache with a soft etched-paper feel, not photoreal. Sun-bleached prairie palette: muted ochres, wheat golds, brown chernozem soil, prairie sage, deep ink shadows. Township grid lines barely visible like an old land-survey plate. Single quarter section centered. Sweeping horizon line, big prairie sky, low sun. No people, no text, no logos, no UI. Region: South · Treaty 4, early summer. rich heavy black soil. Land composition: 88% cultivated cropland in ordered strips, 8% native pasture with prairie grass texture, 2% aspen bush and brush along the edge, a small yard site with bins and a windbreak. Distinguishing features: two contiguous quarters separated by a low fence line, small bin yard with poplar windbreak on the SE corner. Aspect ratio 3:2, painterly, illustration. Absolutely no text or watermarks in the image.",
+      "meta": {
+        "slug": "lipton-half-section",
+        "title": "Lipton half-section",
+        "rm": "RM Lipton No. 217",
+        "region": "South · Treaty 4",
+        "acres": 318.4,
+        "cultivated": 280,
+        "pasture": 24,
+        "hayland": 0,
+        "bush": 6,
+        "yard": 8,
+        "soil": 72,
+        "status": "For Sale",
+        "season": "early summer",
+        "notes": "two contiguous quarters separated by a low fence line, small bin yard with poplar windbreak on the SE corner"
+      }
+    },
+    {
+      "id": "caron-north-quarter",
+      "output_file": "caron-north-quarter.png",
+      "prompt": "Painterly aerial view of a Saskatchewan farmland parcel. Editorial-cartographic aesthetic — hand-painted gouache with a soft etched-paper feel, not photoreal. Sun-bleached prairie palette: muted ochres, wheat golds, brown chernozem soil, prairie sage, deep ink shadows. Township grid lines barely visible like an old land-survey plate. Single quarter section centered. Sweeping horizon line, big prairie sky, low sun. No people, no text, no logos, no UI. Region: South · Treaty 4, late spring, freshly seeded. brown chernozem. Land composition: 96% cultivated cropland in ordered strips, 4% aspen bush and brush along the edge. Distinguishing features: a single quarter section in pulse rotation; pencil-thin tractor tracks across the field. Aspect ratio 3:2, painterly, illustration. Absolutely no text or watermarks in the image.",
+      "meta": {
+        "slug": "caron-north-quarter",
+        "title": "North Caron quarter",
+        "rm": "RM Caron No. 162",
+        "region": "South · Treaty 4",
+        "acres": 158,
+        "cultivated": 152,
+        "pasture": 0,
+        "hayland": 0,
+        "bush": 6,
+        "yard": 0,
+        "soil": 64,
+        "status": "Pending",
+        "season": "late spring, freshly seeded",
+        "notes": "a single quarter section in pulse rotation; pencil-thin tractor tracks across the field"
+      }
+    },
+    {
+      "id": "vanscoy-three-quarter",
+      "output_file": "vanscoy-three-quarter.png",
+      "prompt": "Painterly aerial view of a Saskatchewan farmland parcel. Editorial-cartographic aesthetic — hand-painted gouache with a soft etched-paper feel, not photoreal. Sun-bleached prairie palette: muted ochres, wheat golds, brown chernozem soil, prairie sage, deep ink shadows. Township grid lines barely visible like an old land-survey plate. Single quarter section centered. Sweeping horizon line, big prairie sky, low sun. No people, no text, no logos, no UI. Region: Central · Treaty 6, mid summer. brown chernozem. Land composition: 67% cultivated cropland in ordered strips, 29% native pasture with prairie grass texture, 4% aspen bush and brush along the edge. Distinguishing features: three quarters arranged L-shape, two in crop and one in native grass; a barbed-wire perimeter and a dugout pond on the east edge. Aspect ratio 3:2, painterly, illustration. Absolutely no text or watermarks in the image.",
+      "meta": {
+        "slug": "vanscoy-three-quarter",
+        "title": "Vanscoy three-quarter",
+        "rm": "RM Vanscoy No. 345",
+        "region": "Central · Treaty 6",
+        "acres": 478.6,
+        "cultivated": 320,
+        "pasture": 140,
+        "hayland": 0,
+        "bush": 18,
+        "yard": 0,
+        "soil": 58,
+        "status": "For Sale",
+        "season": "mid summer",
+        "notes": "three quarters arranged L-shape, two in crop and one in native grass; a barbed-wire perimeter and a dugout pond on the east edge"
+      }
+    },
+    {
+      "id": "coalfields-pasture",
+      "output_file": "coalfields-pasture.png",
+      "prompt": "Painterly aerial view of a Saskatchewan farmland parcel. Editorial-cartographic aesthetic — hand-painted gouache with a soft etched-paper feel, not photoreal. Sun-bleached prairie palette: muted ochres, wheat golds, brown chernozem soil, prairie sage, deep ink shadows. Township grid lines barely visible like an old land-survey plate. Single quarter section centered. Sweeping horizon line, big prairie sky, low sun. No people, no text, no logos, no UI. Region: South · Treaty 4, late summer, dry grass. lighter sandy soil. Land composition: 100% native pasture with prairie grass texture. Distinguishing features: open shortgrass prairie cross-fenced into three paddocks, two dugouts catching afternoon light, no buildings. A pale ochre 'L' notation in the corner, suggesting a leasehold. Aspect ratio 3:2, painterly, illustration. Absolutely no text or watermarks in the image.",
+      "meta": {
+        "slug": "coalfields-pasture",
+        "title": "Coalfields pasture",
+        "rm": "RM Coalfields No. 4",
+        "region": "South · Treaty 4",
+        "acres": 240,
+        "cultivated": 0,
+        "pasture": 240,
+        "hayland": 0,
+        "bush": 0,
+        "yard": 0,
+        "soil": 42,
+        "status": "Lease",
+        "season": "late summer, dry grass",
+        "notes": "open shortgrass prairie cross-fenced into three paddocks, two dugouts catching afternoon light, no buildings"
+      }
+    },
+    {
+      "id": "buckland-section",
+      "output_file": "buckland-section.png",
+      "prompt": "Painterly aerial view of a Saskatchewan farmland parcel. Editorial-cartographic aesthetic — hand-painted gouache with a soft etched-paper feel, not photoreal. Sun-bleached prairie palette: muted ochres, wheat golds, brown chernozem soil, prairie sage, deep ink shadows. Township grid lines barely visible like an old land-survey plate. Single quarter section centered. Sweeping horizon line, big prairie sky, low sun. No people, no text, no logos, no UI. Region: Northern grain belt, harvest, swathed grain. rich heavy black soil. Land composition: 94% cultivated cropland in ordered strips, 5% hayland with mown windrows, 2% aspen bush and brush along the edge. Distinguishing features: a full section, deep black soil, long curving swaths cut into the wheat, a single combine on the horizon as a tiny silhouette. A faint maroon notation in the corner suggesting a closed file. Aspect ratio 3:2, painterly, illustration. Absolutely no text or watermarks in the image.",
+      "meta": {
+        "slug": "buckland-section",
+        "title": "Buckland section",
+        "rm": "RM Buckland No. 491",
+        "region": "Northern grain belt",
+        "acres": 640,
+        "cultivated": 600,
+        "pasture": 0,
+        "hayland": 30,
+        "bush": 10,
+        "yard": 0,
+        "soil": 70,
+        "status": "Sold",
+        "season": "harvest, swathed grain",
+        "notes": "a full section, deep black soil, long curving swaths cut into the wheat, a single combine on the horizon as a tiny silhouette"
+      }
+    },
+    {
+      "id": "snipe-lake-wanted",
+      "output_file": "snipe-lake-wanted.png",
+      "prompt": "Painterly aerial view of a Saskatchewan farmland parcel. Editorial-cartographic aesthetic — hand-painted gouache with a soft etched-paper feel, not photoreal. Sun-bleached prairie palette: muted ochres, wheat golds, brown chernozem soil, prairie sage, deep ink shadows. Township grid lines barely visible like an old land-survey plate. Single quarter section centered. Sweeping horizon line, big prairie sky, low sun. No people, no text, no logos, no UI. Region: Central · Treaty 6, spring, snow patches lingering. transitional grey-wooded soil. Land composition: 63% cultivated cropland in ordered strips, 38% native pasture with prairie grass texture. Distinguishing features: a representative composite parcel — fields divided by a coulee, distant lake on the horizon hinting at the namesake. A faint hand-drawn arrow inset, suggesting an active search. Aspect ratio 3:2, painterly, illustration. Absolutely no text or watermarks in the image.",
+      "meta": {
+        "slug": "snipe-lake-wanted",
+        "title": "Snipe Lake — buyer wanted",
+        "rm": "RM Snipe Lake No. 259",
+        "region": "Central · Treaty 6",
+        "acres": 160,
+        "cultivated": 100,
+        "pasture": 60,
+        "hayland": 0,
+        "bush": 0,
+        "yard": 0,
+        "soil": 50,
+        "status": "Wanted",
+        "season": "spring, snow patches lingering",
+        "notes": "a representative composite parcel — fields divided by a coulee, distant lake on the horizon hinting at the namesake"
+      }
+    },
+    {
+      "id": "eyebrow-quarter",
+      "output_file": "eyebrow-quarter.png",
+      "prompt": "Painterly aerial view of a Saskatchewan farmland parcel. Editorial-cartographic aesthetic — hand-painted gouache with a soft etched-paper feel, not photoreal. Sun-bleached prairie palette: muted ochres, wheat golds, brown chernozem soil, prairie sage, deep ink shadows. Township grid lines barely visible like an old land-survey plate. Single quarter section centered. Sweeping horizon line, big prairie sky, low sun. No people, no text, no logos, no UI. Region: South · Treaty 4, early summer canola in bloom. brown chernozem. Land composition: 98% cultivated cropland in ordered strips, 3% aspen bush and brush along the edge. Distinguishing features: a single cultivated quarter section, brilliant yellow canola bloom, a gravel highway frontage on the south edge. Aspect ratio 3:2, painterly, illustration. Absolutely no text or watermarks in the image.",
+      "meta": {
+        "slug": "eyebrow-quarter",
+        "title": "Eyebrow quarter",
+        "rm": "RM Eyebrow No. 193",
+        "region": "South · Treaty 4",
+        "acres": 159.8,
+        "cultivated": 156,
+        "pasture": 0,
+        "hayland": 0,
+        "bush": 4,
+        "yard": 0,
+        "soil": 68,
+        "status": "For Sale",
+        "season": "early summer canola in bloom",
+        "notes": "a single cultivated quarter section, brilliant yellow canola bloom, a gravel highway frontage on the south edge"
+      }
+    },
+    {
+      "id": "edenwold-half-section",
+      "output_file": "edenwold-half-section.png",
+      "prompt": "Painterly aerial view of a Saskatchewan farmland parcel. Editorial-cartographic aesthetic — hand-painted gouache with a soft etched-paper feel, not photoreal. Sun-bleached prairie palette: muted ochres, wheat golds, brown chernozem soil, prairie sage, deep ink shadows. Township grid lines barely visible like an old land-survey plate. Single quarter section centered. Sweeping horizon line, big prairie sky, low sun. No people, no text, no logos, no UI. Region: South · Treaty 4, summer, deep green wheat. rich heavy black soil. Land composition: 93% cultivated cropland in ordered strips, 6% hayland with mown windrows, a small yard site with bins and a windbreak. Distinguishing features: two quarters of premium class-1 black chernozem, a shop and 5,000 bu storage bins in the yard, the Regina skyline as a thin dark line on the far horizon. Aspect ratio 3:2, painterly, illustration. Absolutely no text or watermarks in the image.",
+      "meta": {
+        "slug": "edenwold-half-section",
+        "title": "Edenwold half-section",
+        "rm": "RM Edenwold No. 158",
+        "region": "South · Treaty 4",
+        "acres": 320,
+        "cultivated": 296,
+        "pasture": 0,
+        "hayland": 18,
+        "bush": 0,
+        "yard": 6,
+        "soil": 75,
+        "status": "For Sale",
+        "season": "summer, deep green wheat",
+        "notes": "two quarters of premium class-1 black chernozem, a shop and 5,000 bu storage bins in the yard, the Regina skyline as a thin dark line on the far horizon"
+      }
+    },
+    {
+      "id": "hudson-bay-pasture-lease",
+      "output_file": "hudson-bay-pasture-lease.png",
+      "prompt": "Painterly aerial view of a Saskatchewan farmland parcel. Editorial-cartographic aesthetic — hand-painted gouache with a soft etched-paper feel, not photoreal. Sun-bleached prairie palette: muted ochres, wheat golds, brown chernozem soil, prairie sage, deep ink shadows. Township grid lines barely visible like an old land-survey plate. Single quarter section centered. Sweeping horizon line, big prairie sky, low sun. No people, no text, no logos, no UI. Region: Northern grain belt, early autumn, aspen leaves turning gold. lighter sandy soil. Land composition: 88% native pasture with prairie grass texture, 13% aspen bush and brush along the edge. Distinguishing features: aspen parkland transitioning from open pasture to mixed bluff, a clutch of cattle in the middle distance, soft northern light. A pale ochre 'L' notation in the corner, suggesting a leasehold. Aspect ratio 3:2, painterly, illustration. Absolutely no text or watermarks in the image.",
+      "meta": {
+        "slug": "hudson-bay-pasture-lease",
+        "title": "Hudson Bay grazing lease",
+        "rm": "RM Hudson Bay No. 394",
+        "region": "Northern grain belt",
+        "acres": 480,
+        "cultivated": 0,
+        "pasture": 420,
+        "hayland": 0,
+        "bush": 60,
+        "yard": 0,
+        "soil": 38,
+        "status": "Lease",
+        "season": "early autumn, aspen leaves turning gold",
+        "notes": "aspen parkland transitioning from open pasture to mixed bluff, a clutch of cattle in the middle distance, soft northern light"
+      }
+    },
+    {
+      "id": "battle-river-quarter",
+      "output_file": "battle-river-quarter.png",
+      "prompt": "Painterly aerial view of a Saskatchewan farmland parcel. Editorial-cartographic aesthetic — hand-painted gouache with a soft etched-paper feel, not photoreal. Sun-bleached prairie palette: muted ochres, wheat golds, brown chernozem soil, prairie sage, deep ink shadows. Township grid lines barely visible like an old land-survey plate. Single quarter section centered. Sweeping horizon line, big prairie sky, low sun. No people, no text, no logos, no UI. Region: Northern grain belt, late summer, grain ripening. brown chernozem. Land composition: 89% cultivated cropland in ordered strips, 11% aspen bush and brush along the edge. Distinguishing features: a quarter section with a poplar bluff along the north edge transitioning to grey-wooded soil, a coulee draining toward the Battle River. Aspect ratio 3:2, painterly, illustration. Absolutely no text or watermarks in the image.",
+      "meta": {
+        "slug": "battle-river-quarter",
+        "title": "Battle River quarter",
+        "rm": "RM Battle River No. 438",
+        "region": "Northern grain belt",
+        "acres": 160,
+        "cultivated": 142,
+        "pasture": 0,
+        "hayland": 0,
+        "bush": 18,
+        "yard": 0,
+        "soil": 62,
+        "status": "For Sale",
+        "season": "late summer, grain ripening",
+        "notes": "a quarter section with a poplar bluff along the north edge transitioning to grey-wooded soil, a coulee draining toward the Battle River"
+      }
+    }
+  ]
+}

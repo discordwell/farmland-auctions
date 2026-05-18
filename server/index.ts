@@ -37,7 +37,8 @@ import { auctionEvents } from "./realtime.js";
 import { dollarsToCents, serializeAuction, serializeListing } from "./serializers.js";
 
 const listingStatusSchema = z.enum(["For Sale", "Pending", "Sold", "Wanted", "Lease"]);
-const propertyTypeSchema = z.enum(["Grain", "Mixed", "Pasture", "Lease"]);
+// Property-type taxonomy was replaced by per-listing acres composition (acresCultivated, acresPasture, etc.)
+// in migration 008. The old enum is intentionally removed.
 
 const listingSortSchema = z.enum([
   "newest",
@@ -50,7 +51,6 @@ const listingSortSchema = z.enum([
 const listingQuerySchema = z.object({
   status: listingStatusSchema.or(z.literal("All")).optional(),
   region: z.string().optional(),
-  propertyType: propertyTypeSchema.optional(),
   minAcres: z.coerce.number().positive().optional(),
   maxAcres: z.coerce.number().positive().optional(),
   minSoilRating: z.coerce.number().int().min(0).max(100).optional(),
@@ -103,11 +103,16 @@ const adminListingBodySchema = z.object({
   title: z.string().min(3),
   rm: z.string().min(2),
   region: z.string().min(2),
+  legalDescription: z.string().max(200).default(""),
   acres: z.coerce.number().positive(),
+  acresCultivated: z.coerce.number().nonnegative().default(0),
+  acresPasture: z.coerce.number().nonnegative().default(0),
+  acresHayland: z.coerce.number().nonnegative().default(0),
+  acresBush: z.coerce.number().nonnegative().default(0),
+  acresYard: z.coerce.number().nonnegative().default(0),
   pricePerAcre: z.coerce.number().nonnegative(),
   avgAssessment: z.coerce.number().nonnegative(),
   soilRating: z.coerce.number().int().min(0).max(100),
-  type: propertyTypeSchema,
   status: listingStatusSchema,
   latitude: z.coerce.number().optional(),
   longitude: z.coerce.number().optional(),
@@ -199,7 +204,6 @@ function buildListingWhere(rawQuery: unknown) {
 
   if (filters.status && filters.status !== "All") add("l.status = ?", filters.status);
   if (filters.region && filters.region !== "All") add("l.region = ?", filters.region);
-  if (filters.propertyType) add("l.property_type = ?", filters.propertyType);
   if (filters.minAcres) add("l.acres >= ?", filters.minAcres);
   if (filters.maxAcres) add("l.acres <= ?", filters.maxAcres);
   if (filters.minSoilRating) add("l.soil_final_rating >= ?", filters.minSoilRating);
@@ -1015,18 +1019,22 @@ async function registerRoutes(app: FastifyInstance) {
       const listing = await client.query(
         `
           INSERT INTO listings (
-            slug, title, rm, region, acres, price_per_acre_cents,
-            avg_assessment_per_quarter_cents, soil_final_rating, property_type,
+            slug, title, rm, region, legal_description,
+            acres, acres_cultivated, acres_pasture, acres_hayland, acres_bush, acres_yard,
+            price_per_acre_cents, avg_assessment_per_quarter_cents, soil_final_rating,
             status, latitude, longitude, hero_image_url, satellite_image_url,
             description, water_source, current_operator, last_sale_price_cents,
             last_sale_date, zoning, mineral_rights, encumbrances, seo_description,
             published_at
           )
           VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9,
-            $10, $11, $12, $13, $14, $15, $16, $17, $18,
-            $19, $20, $21, $22, $23,
-            CASE WHEN $24 THEN now() ELSE NULL END
+            $1, $2, $3, $4, $5,
+            $6, $7, $8, $9, $10, $11,
+            $12, $13, $14,
+            $15, $16, $17, $18, $19,
+            $20, $21, $22, $23,
+            $24, $25, $26, $27, $28,
+            CASE WHEN $29 THEN now() ELSE NULL END
           )
           RETURNING *
         `,
@@ -1035,11 +1043,16 @@ async function registerRoutes(app: FastifyInstance) {
           body.title,
           body.rm,
           body.region,
+          body.legalDescription,
           body.acres,
+          body.acresCultivated,
+          body.acresPasture,
+          body.acresHayland,
+          body.acresBush,
+          body.acresYard,
           dollarsToCents(body.pricePerAcre),
           dollarsToCents(body.avgAssessment),
           body.soilRating,
-          body.type,
           body.status,
           body.latitude ?? null,
           body.longitude ?? null,
@@ -1097,7 +1110,14 @@ async function registerRoutes(app: FastifyInstance) {
         title: body.title ?? existing.rows[0].title,
         rm: body.rm ?? existing.rows[0].rm,
         region: body.region ?? existing.rows[0].region,
+        legalDescription: body.legalDescription ?? existing.rows[0].legal_description ?? "",
         acres: body.acres ?? Number(existing.rows[0].acres),
+        acresCultivated:
+          body.acresCultivated ?? Number(existing.rows[0].acres_cultivated ?? 0),
+        acresPasture: body.acresPasture ?? Number(existing.rows[0].acres_pasture ?? 0),
+        acresHayland: body.acresHayland ?? Number(existing.rows[0].acres_hayland ?? 0),
+        acresBush: body.acresBush ?? Number(existing.rows[0].acres_bush ?? 0),
+        acresYard: body.acresYard ?? Number(existing.rows[0].acres_yard ?? 0),
         pricePerAcreCents:
           body.pricePerAcre == null
             ? Number(existing.rows[0].price_per_acre_cents)
@@ -1107,7 +1127,6 @@ async function registerRoutes(app: FastifyInstance) {
             ? Number(existing.rows[0].avg_assessment_per_quarter_cents)
             : dollarsToCents(body.avgAssessment),
         soilRating: body.soilRating ?? Number(existing.rows[0].soil_final_rating),
-        type: body.type ?? existing.rows[0].property_type,
         status: body.status ?? existing.rows[0].status,
         latitude: body.latitude ?? existing.rows[0].latitude,
         longitude: body.longitude ?? existing.rows[0].longitude,
@@ -1146,39 +1165,49 @@ async function registerRoutes(app: FastifyInstance) {
             title = $2,
             rm = $3,
             region = $4,
-            acres = $5,
-            price_per_acre_cents = $6,
-            avg_assessment_per_quarter_cents = $7,
-            soil_final_rating = $8,
-            property_type = $9,
-            status = $10,
-            latitude = $11,
-            longitude = $12,
-            hero_image_url = $13,
-            satellite_image_url = $14,
-            description = $15,
-            water_source = $16,
-            current_operator = $17,
-            last_sale_price_cents = $18,
-            last_sale_date = $19,
-            zoning = $20,
-            mineral_rights = $21,
-            encumbrances = $22,
-            seo_description = $23,
-            published_at = $24,
+            legal_description = $5,
+            acres = $6,
+            acres_cultivated = $7,
+            acres_pasture = $8,
+            acres_hayland = $9,
+            acres_bush = $10,
+            acres_yard = $11,
+            price_per_acre_cents = $12,
+            avg_assessment_per_quarter_cents = $13,
+            soil_final_rating = $14,
+            status = $15,
+            latitude = $16,
+            longitude = $17,
+            hero_image_url = $18,
+            satellite_image_url = $19,
+            description = $20,
+            water_source = $21,
+            current_operator = $22,
+            last_sale_price_cents = $23,
+            last_sale_date = $24,
+            zoning = $25,
+            mineral_rights = $26,
+            encumbrances = $27,
+            seo_description = $28,
+            published_at = $29,
             updated_at = now()
-          WHERE id = $25
+          WHERE id = $30
         `,
         [
           next.slug,
           next.title,
           next.rm,
           next.region,
+          next.legalDescription,
           next.acres,
+          next.acresCultivated,
+          next.acresPasture,
+          next.acresHayland,
+          next.acresBush,
+          next.acresYard,
           next.pricePerAcreCents,
           next.avgAssessmentCents,
           next.soilRating,
-          next.type,
           next.status,
           next.latitude,
           next.longitude,

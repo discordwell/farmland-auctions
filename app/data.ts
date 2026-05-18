@@ -6,11 +6,16 @@ export type Listing = {
   title: string;
   rm: string;
   region: string;
+  legalDescription?: string;
   acres: number;
+  acresCultivated?: number;
+  acresPasture?: number;
+  acresHayland?: number;
+  acresBush?: number;
+  acresYard?: number;
   pricePerAcre: number;
   avgAssessment: number;
   soilRating: number;
-  type: string;
   status: ListingStatus;
   image: string;
   satellite: string;

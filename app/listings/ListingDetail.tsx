@@ -1,13 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import dynamic from "next/dynamic";
 import { type Listing } from "../data";
-
-const LeafletEmbed = dynamic(
-  () => import("../components/LeafletEmbed").then((m) => m.LeafletEmbed),
-  { ssr: false, loading: () => <div className="leaflet-host leaflet-embed" /> }
-);
+import { GoogleMapsEmbed } from "../components/GoogleMapsEmbed";
 
 const cad = new Intl.NumberFormat("en-CA", {
   style: "currency",
@@ -158,6 +153,12 @@ export function ListingDetail({ initial = null, slug: slugProp }: ListingDetailP
                   {listing.title.split(" ").slice(0, -1).join(" ")}{" "}
                   <em>{listing.title.split(" ").slice(-1)[0]}.</em>
                 </h1>
+                {listing.legalDescription ? (
+                  <div className="lld">
+                    <span className="lbl">Legal land description</span>
+                    <span className="val">{listing.legalDescription}</span>
+                  </div>
+                ) : null}
                 <div className="legal">
                   {listing.coordinates || "Coordinates not published"} · {listing.region}
                 </div>
@@ -223,14 +224,56 @@ export function ListingDetail({ initial = null, slug: slugProp }: ListingDetailP
                     <dd>{listing.soilRating}/100</dd>
                   </div>
                   <div>
-                    <dt>Type</dt>
-                    <dd>{listing.type}</dd>
-                  </div>
-                  <div>
                     <dt>Status</dt>
                     <dd>{listing.status}</dd>
                   </div>
                 </dl>
+
+                {(() => {
+                  const segments: Array<[string, string, number]> = [
+                    ["cultivated", "Cultivated", listing.acresCultivated ?? 0],
+                    ["pasture", "Pasture", listing.acresPasture ?? 0],
+                    ["hayland", "Hayland", listing.acresHayland ?? 0],
+                    ["bush", "Bush", listing.acresBush ?? 0],
+                    ["yard", "Yard", listing.acresYard ?? 0]
+                  ];
+                  const accountedFor = segments.reduce((sum, [, , acres]) => sum + acres, 0);
+                  if (accountedFor <= 0) return null;
+                  const total = Math.max(accountedFor, listing.acres);
+                  return (
+                    <div className="composition">
+                      <div className="lbl">Land composition</div>
+                      <div className="composition-bar" role="img" aria-label="Land composition">
+                        {segments.map(([key, , acres]) =>
+                          acres > 0 ? (
+                            <div
+                              key={key}
+                              className={`composition-segment c-${key}`}
+                              style={{ flexGrow: acres }}
+                              title={`${acres} ac`}
+                            />
+                          ) : null
+                        )}
+                      </div>
+                      <ul className="composition-legend">
+                        {segments.map(([key, label, acres]) =>
+                          acres > 0 ? (
+                            <li key={key}>
+                              <span className={`composition-swatch c-${key}`}></span>
+                              <span className="ll">{label}</span>
+                              <span className="ac">
+                                {number.format(acres)} ac
+                                <span className="pct">
+                                  &nbsp;· {Math.round((acres / total) * 100)}%
+                                </span>
+                              </span>
+                            </li>
+                          ) : null
+                        )}
+                      </ul>
+                    </div>
+                  );
+                })()}
 
                 {listing.highlights?.length ? (
                   <div className="detail-highlights">
@@ -295,7 +338,7 @@ export function ListingDetail({ initial = null, slug: slugProp }: ListingDetailP
             })()}
 
             {listing.latitude != null && listing.longitude != null ? (
-              <LeafletEmbed
+              <GoogleMapsEmbed
                 latitude={listing.latitude}
                 longitude={listing.longitude}
                 label={`${listing.title} · ${listing.rm}`}
