@@ -469,7 +469,7 @@ export function FarmAuctionApp() {
         <nav className={mobileNav ? "nav-links open" : "nav-links"}>
           <a href="#listings">Listings</a>
           <a href="#auction">Auction</a>
-          <a href="#workflow">Admin</a>
+          <a href="/admin/">Admin</a>
           <a href="#contact">Contact</a>
         </nav>
         <div className="header-actions">

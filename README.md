@@ -39,6 +39,25 @@ Core API routes:
 - `POST /api/auctions/:id/bids`
 - `GET /api/auctions/:id/events`
 - `POST /api/contact-inquiries`
+- `GET /api/admin/dashboard`
+- `GET /api/admin/listings`
+- `POST /api/admin/listings`
+- `GET /api/admin/auctions`
+- `POST /api/admin/auctions`
+- `GET /api/admin/auctions/:auctionId/bidders`
+- `POST /api/admin/auctions/:auctionId/close`
+
+Admin console:
+
+```text
+/admin
+```
+
+Smoke test:
+
+```bash
+SMOKE_BASE_URL=http://127.0.0.1:3510 npm run test:smoke
+```
 
 ## Deployment
 

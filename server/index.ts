@@ -78,6 +78,23 @@ const adminListingBodySchema = z.object({
   publish: z.coerce.boolean().default(false)
 });
 
+const adminListingUpdateSchema = adminListingBodySchema.partial().extend({
+  publish: z.coerce.boolean().optional()
+});
+
+const adminAuctionBodySchema = z.object({
+  listingId: z.uuid(),
+  title: z.string().min(3),
+  auctionType: z.enum(["live", "sealed"]).default("live"),
+  status: z.enum(["draft", "registration", "open", "paused", "closed", "settled"]).default("registration"),
+  opensAt: z.coerce.date(),
+  closesAt: z.coerce.date(),
+  softCloseSeconds: z.coerce.number().int().min(0).default(300),
+  bidIncrement: z.coerce.number().positive().default(25_000),
+  reservePrice: z.coerce.number().nonnegative().default(0),
+  reserveVisibility: z.enum(["hidden", "met-only", "public"]).default("met-only")
+});
+
 const idParamSchema = z.object({ id: z.uuid() });
 const auctionIdParamSchema = z.object({ auctionId: z.uuid() });
 const bidderApprovalParamSchema = z.object({
@@ -139,6 +156,48 @@ async function listingBySlug(slug: string) {
 
   if (!result.rowCount) throw new ApiError(404, "Listing not found");
   return serializeListing(result.rows[0]);
+}
+
+async function adminListingById(id: string) {
+  const result = await query(
+    `
+      SELECT
+        l.*,
+        COALESCE(
+          array_agg(lh.body ORDER BY lh.position) FILTER (WHERE lh.body IS NOT NULL),
+          ARRAY[]::text[]
+        ) AS highlights
+      FROM listings l
+      LEFT JOIN listing_highlights lh ON lh.listing_id = l.id
+      WHERE l.id = $1
+      GROUP BY l.id
+    `,
+    [id]
+  );
+
+  if (!result.rowCount) throw new ApiError(404, "Listing not found");
+  return serializeListing(result.rows[0]);
+}
+
+async function loadAuctionForAdmin(id: string) {
+  const result = await query(
+    `
+      SELECT
+        a.*,
+        l.slug AS listing_slug,
+        l.rm AS listing_rm,
+        l.acres AS listing_acres,
+        l.soil_final_rating AS listing_soil_final_rating,
+        l.hero_image_url AS listing_hero_image_url
+      FROM auctions a
+      JOIN listings l ON l.id = a.listing_id
+      WHERE a.id = $1
+    `,
+    [id]
+  );
+
+  if (!result.rowCount) throw new ApiError(404, "Auction not found");
+  return serializeAuction(result.rows[0]);
 }
 
 async function registerRoutes(app: FastifyInstance) {
@@ -390,6 +449,28 @@ async function registerRoutes(app: FastifyInstance) {
     return result.rows[0];
   });
 
+  app.get("/api/admin/listings", async (request) => {
+    requireAdmin(request);
+    const result = await query(
+      `
+        SELECT
+          l.*,
+          COALESCE(
+            array_agg(lh.body ORDER BY lh.position) FILTER (WHERE lh.body IS NOT NULL),
+            ARRAY[]::text[]
+          ) AS highlights
+        FROM listings l
+        LEFT JOIN listing_highlights lh ON lh.listing_id = l.id
+        GROUP BY l.id
+        ORDER BY l.updated_at DESC
+      `
+    );
+
+    return {
+      listings: result.rows.map(serializeListing)
+    };
+  });
+
   app.post("/api/admin/listings", async (request, reply) => {
     requireAdmin(request);
     const body = adminListingBodySchema.parse(request.body);
@@ -441,7 +522,220 @@ async function registerRoutes(app: FastifyInstance) {
 
     reply.status(201);
     return {
-      listing: await listingBySlug(result.slug)
+      listing: await adminListingById(result.id)
+    };
+  });
+
+  app.put("/api/admin/listings/:id", async (request) => {
+    requireAdmin(request);
+    const params = idParamSchema.parse(request.params);
+    const body = adminListingUpdateSchema.parse(request.body);
+
+    const listing = await withTransaction(async (client) => {
+      const existing = await client.query("SELECT * FROM listings WHERE id = $1 FOR UPDATE", [
+        params.id
+      ]);
+      if (!existing.rowCount) throw new ApiError(404, "Listing not found");
+
+      const next = {
+        slug: body.slug ?? existing.rows[0].slug,
+        title: body.title ?? existing.rows[0].title,
+        rm: body.rm ?? existing.rows[0].rm,
+        region: body.region ?? existing.rows[0].region,
+        acres: body.acres ?? Number(existing.rows[0].acres),
+        pricePerAcreCents:
+          body.pricePerAcre == null
+            ? Number(existing.rows[0].price_per_acre_cents)
+            : dollarsToCents(body.pricePerAcre),
+        avgAssessmentCents:
+          body.avgAssessment == null
+            ? Number(existing.rows[0].avg_assessment_per_quarter_cents)
+            : dollarsToCents(body.avgAssessment),
+        soilRating: body.soilRating ?? Number(existing.rows[0].soil_final_rating),
+        type: body.type ?? existing.rows[0].property_type,
+        status: body.status ?? existing.rows[0].status,
+        latitude: body.latitude ?? existing.rows[0].latitude,
+        longitude: body.longitude ?? existing.rows[0].longitude,
+        image: body.image ?? existing.rows[0].hero_image_url,
+        satellite: body.satellite ?? existing.rows[0].satellite_image_url,
+        description: body.description ?? existing.rows[0].description,
+        publishedAt:
+          body.publish == null
+            ? existing.rows[0].published_at
+            : body.publish
+              ? new Date()
+              : null
+      };
+
+      await client.query(
+        `
+          UPDATE listings
+          SET
+            slug = $1,
+            title = $2,
+            rm = $3,
+            region = $4,
+            acres = $5,
+            price_per_acre_cents = $6,
+            avg_assessment_per_quarter_cents = $7,
+            soil_final_rating = $8,
+            property_type = $9,
+            status = $10,
+            latitude = $11,
+            longitude = $12,
+            hero_image_url = $13,
+            satellite_image_url = $14,
+            description = $15,
+            published_at = $16,
+            updated_at = now()
+          WHERE id = $17
+        `,
+        [
+          next.slug,
+          next.title,
+          next.rm,
+          next.region,
+          next.acres,
+          next.pricePerAcreCents,
+          next.avgAssessmentCents,
+          next.soilRating,
+          next.type,
+          next.status,
+          next.latitude,
+          next.longitude,
+          next.image,
+          next.satellite,
+          next.description,
+          next.publishedAt,
+          params.id
+        ]
+      );
+
+      if (body.highlights) {
+        await client.query("DELETE FROM listing_highlights WHERE listing_id = $1", [
+          params.id
+        ]);
+        for (const [index, highlight] of body.highlights.entries()) {
+          await client.query(
+            "INSERT INTO listing_highlights (listing_id, body, position) VALUES ($1, $2, $3)",
+            [params.id, highlight, index + 1]
+          );
+        }
+      }
+
+      await client.query(
+        `
+          INSERT INTO auction_events (actor_type, event_type, payload)
+          VALUES ('admin', 'listing.updated', jsonb_build_object('listingId', $1::uuid))
+        `,
+        [params.id]
+      );
+
+      return params.id;
+    });
+
+    return {
+      listing: await adminListingById(listing)
+    };
+  });
+
+  app.get("/api/admin/auctions", async (request) => {
+    requireAdmin(request);
+    const result = await query(
+      `
+        SELECT
+          a.*,
+          l.slug AS listing_slug,
+          l.rm AS listing_rm,
+          l.acres AS listing_acres,
+          l.soil_final_rating AS listing_soil_final_rating,
+          l.hero_image_url AS listing_hero_image_url
+        FROM auctions a
+        JOIN listings l ON l.id = a.listing_id
+        ORDER BY a.updated_at DESC
+      `
+    );
+
+    return {
+      auctions: result.rows.map(serializeAuction)
+    };
+  });
+
+  app.post("/api/admin/auctions", async (request, reply) => {
+    requireAdmin(request);
+    const body = adminAuctionBodySchema.parse(request.body);
+    if (body.closesAt <= body.opensAt) {
+      throw new ApiError(400, "Auction close time must be after open time");
+    }
+
+    const result = await withTransaction(async (client) => {
+      const listing = await client.query("SELECT id FROM listings WHERE id = $1", [
+        body.listingId
+      ]);
+      if (!listing.rowCount) throw new ApiError(404, "Listing not found");
+
+      const auction = await client.query<{ id: string }>(
+        `
+          INSERT INTO auctions (
+            listing_id, title, status, auction_type, opens_at, closes_at,
+            soft_close_seconds, bid_increment_cents, reserve_price_cents,
+            reserve_visibility
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          RETURNING id
+        `,
+        [
+          body.listingId,
+          body.title,
+          body.status,
+          body.auctionType,
+          body.opensAt,
+          body.closesAt,
+          body.softCloseSeconds,
+          dollarsToCents(body.bidIncrement),
+          dollarsToCents(body.reservePrice),
+          body.reserveVisibility
+        ]
+      );
+
+      await client.query(
+        `
+          INSERT INTO auction_events (auction_id, actor_type, event_type, payload)
+          VALUES ($1, 'admin', 'auction.created', jsonb_build_object('status', $2))
+        `,
+        [auction.rows[0].id, body.status]
+      );
+
+      return auction.rows[0].id;
+    });
+
+    reply.status(201);
+    return {
+      auction: await loadAuctionForAdmin(result)
+    };
+  });
+
+  app.get("/api/admin/auctions/:auctionId/bidders", async (request) => {
+    requireAdmin(request);
+    const params = auctionIdParamSchema.parse(request.params);
+    const result = await query(
+      `
+        SELECT
+          aba.*,
+          b.email,
+          b.legal_name,
+          b.phone,
+          b.verification_status
+        FROM auction_bidder_authorizations aba
+        JOIN bidders b ON b.id = aba.bidder_id
+        WHERE aba.auction_id = $1
+        ORDER BY aba.updated_at DESC
+      `,
+      [params.auctionId]
+    );
+
+    return {
+      authorizations: result.rows
     };
   });
 
@@ -464,6 +758,35 @@ async function registerRoutes(app: FastifyInstance) {
     };
   });
 
+  app.post("/api/admin/auctions/:auctionId/bidders/:bidderId/decision", async (request) => {
+    requireAdmin(request);
+    const params = bidderApprovalParamSchema.parse(request.params);
+    const body = z
+      .object({
+        status: z.enum(["approved", "rejected", "suspended"]),
+        depositStatus: z
+          .enum(["not_required", "pending", "verified", "waived"])
+          .default("verified")
+      })
+      .parse(request.body);
+
+    const result = await query(
+      `
+        UPDATE auction_bidder_authorizations
+        SET status = $1, deposit_status = $2, updated_at = now()
+        WHERE auction_id = $3 AND bidder_id = $4
+        RETURNING *
+      `,
+      [body.status, body.depositStatus, params.auctionId, params.bidderId]
+    );
+
+    if (!result.rowCount) throw new ApiError(404, "Bidder authorization not found");
+    auctionEvents.publish(params.auctionId, "bidder.authorization", result.rows[0]);
+    return {
+      authorization: result.rows[0]
+    };
+  });
+
   app.post("/api/admin/auctions/:auctionId/status", async (request) => {
     requireAdmin(request);
     const params = auctionIdParamSchema.parse(request.params);
@@ -480,6 +803,93 @@ async function registerRoutes(app: FastifyInstance) {
     if (!result.rowCount) throw new ApiError(404, "Auction not found");
     return {
       auction: serializeAuction(result.rows[0])
+    };
+  });
+
+  app.post("/api/admin/auctions/:auctionId/close", async (request) => {
+    requireAdmin(request);
+    const params = auctionIdParamSchema.parse(request.params);
+
+    const auctionId = await withTransaction(async (client) => {
+      const auction = await client.query("SELECT * FROM auctions WHERE id = $1 FOR UPDATE", [
+        params.auctionId
+      ]);
+      if (!auction.rowCount) throw new ApiError(404, "Auction not found");
+
+      await client.query(
+        "UPDATE auctions SET status = 'closed', closes_at = LEAST(closes_at, now()), updated_at = now() WHERE id = $1",
+        [params.auctionId]
+      );
+
+      await client.query(
+        `
+          INSERT INTO post_auction_tasks (auction_id, title, assignee_role, due_at)
+          VALUES
+            ($1, 'Confirm high bidder identity and final authority', 'broker', now() + interval '1 day'),
+            ($1, 'Prepare seller/buyer summary package', 'admin', now() + interval '1 day'),
+            ($1, 'Issue next-step closing instructions', 'broker', now() + interval '2 days')
+          ON CONFLICT DO NOTHING
+        `,
+        [params.auctionId]
+      );
+
+      await client.query(
+        `
+          INSERT INTO auction_events (auction_id, actor_type, event_type, payload)
+          VALUES ($1, 'admin', 'auction.closed', '{}'::jsonb)
+        `,
+        [params.auctionId]
+      );
+
+      return params.auctionId;
+    });
+
+    const payload = {
+      auction: await loadAuctionForAdmin(auctionId)
+    };
+    auctionEvents.publish(params.auctionId, "auction.closed", payload);
+    return payload;
+  });
+
+  app.get("/api/admin/auctions/:auctionId/tasks", async (request) => {
+    requireAdmin(request);
+    const params = auctionIdParamSchema.parse(request.params);
+    const result = await query(
+      "SELECT * FROM post_auction_tasks WHERE auction_id = $1 ORDER BY created_at ASC",
+      [params.auctionId]
+    );
+    return {
+      tasks: result.rows
+    };
+  });
+
+  app.get("/api/admin/inquiries", async (request) => {
+    requireAdmin(request);
+    const result = await query(
+      "SELECT * FROM contact_inquiries ORDER BY created_at DESC LIMIT 100"
+    );
+    return {
+      inquiries: result.rows
+    };
+  });
+
+  app.get("/api/admin/newsletter-signups", async (request) => {
+    requireAdmin(request);
+    const result = await query(
+      "SELECT * FROM newsletter_signups ORDER BY consent_at DESC LIMIT 100"
+    );
+    return {
+      signups: result.rows
+    };
+  });
+
+  app.get("/api/admin/events", async (request) => {
+    requireAdmin(request);
+    const result = await query(
+      "SELECT * FROM auction_events ORDER BY created_at DESC LIMIT 100"
+    );
+    return {
+      events: result.rows
     };
   });
 }
