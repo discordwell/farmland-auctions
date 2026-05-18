@@ -20,7 +20,7 @@ farmauction.discordwell.com {
 	@siteAssets path /images/* /favicon.svg
 	header @siteAssets Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
 
-	@html path / /index.html /health /health/
+	@html path / /index.html /admin /admin/ /bidder-terms /bidder-terms/ /health /health/
 	header @html Cache-Control "no-cache, no-store, must-revalidate"
 
 	handle {

@@ -68,9 +68,20 @@ type Authorization = {
   bidder_id: string;
   status: string;
   deposit_status: string;
+  deposit_reference: string;
   email: string;
+  entity_type: string;
+  identity_document_url: string;
   legal_name: string;
+  mailing_address: string;
+  max_bid_cents: string | null;
+  operator_notes: string;
   phone: string | null;
+  proof_of_funds_url: string;
+  bidder_proof_of_funds_url: string;
+  reviewed_at: string | null;
+  terms_version: string;
+  bidder_notes: string;
   verification_status: string;
 };
 
@@ -94,6 +105,24 @@ type AuditEvent = {
   id: string;
   event_type: string;
   actor_type: string;
+  created_at: string;
+};
+
+type PostAuctionTask = {
+  id: string;
+  title: string;
+  assignee_role: string;
+  status: string;
+  due_at: string | null;
+};
+
+type Notification = {
+  id: string;
+  event_type: string;
+  recipient_email: string;
+  subject: string;
+  status: string;
+  last_error: string | null;
   created_at: string;
 };
 
@@ -127,6 +156,8 @@ export function AdminConsole() {
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [signups, setSignups] = useState<Signup[]>([]);
   const [events, setEvents] = useState<AuditEvent[]>([]);
+  const [tasks, setTasks] = useState<PostAuctionTask[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [status, setStatus] = useState("");
   const [selectedAuctionId, setSelectedAuctionId] = useState("");
 
@@ -176,14 +207,16 @@ export function AdminConsole() {
         auctionPayload,
         inquiryPayload,
         signupPayload,
-        eventPayload
+        eventPayload,
+        notificationPayload
       ] = await Promise.all([
         adminFetch<Dashboard>("/api/admin/dashboard"),
         adminFetch<{ listings: AdminListing[] }>("/api/admin/listings"),
         adminFetch<{ auctions: AdminAuction[] }>("/api/admin/auctions"),
         adminFetch<{ inquiries: Inquiry[] }>("/api/admin/inquiries"),
         adminFetch<{ signups: Signup[] }>("/api/admin/newsletter-signups"),
-        adminFetch<{ events: AuditEvent[] }>("/api/admin/events")
+        adminFetch<{ events: AuditEvent[] }>("/api/admin/events"),
+        adminFetch<{ notifications: Notification[] }>("/api/admin/notifications")
       ]);
       setDashboard(dashboardPayload);
       setListings(listingPayload.listings);
@@ -191,12 +224,14 @@ export function AdminConsole() {
       setInquiries(inquiryPayload.inquiries);
       setSignups(signupPayload.signups);
       setEvents(eventPayload.events);
+      setNotifications(notificationPayload.notifications);
       setStatus("Synced");
 
       const auctionId = selectedAuctionId || auctionPayload.auctions[0]?.id;
       if (auctionId) {
         setSelectedAuctionId(auctionId);
         await loadAuthorizations(auctionId);
+        await loadTasks(auctionId);
       }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Admin request failed");
@@ -208,6 +243,13 @@ export function AdminConsole() {
       `/api/admin/auctions/${auctionId}/bidders`
     );
     setAuthorizations(payload.authorizations);
+  }
+
+  async function loadTasks(auctionId: string) {
+    const payload = await adminFetch<{ tasks: PostAuctionTask[] }>(
+      `/api/admin/auctions/${auctionId}/tasks`
+    );
+    setTasks(payload.tasks);
   }
 
   async function submitListing(event: FormEvent<HTMLFormElement>) {
@@ -281,19 +323,41 @@ export function AdminConsole() {
     await loadAdmin();
   }
 
-  async function decideBidder(authorization: Authorization, nextStatus: string) {
+  async function submitBidderDecision(event: FormEvent<HTMLFormElement>, authorization: Authorization) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
     await adminFetch(
       `/api/admin/auctions/${authorization.auction_id}/bidders/${authorization.bidder_id}/decision`,
       {
         body: JSON.stringify({
-          depositStatus: nextStatus === "approved" ? "verified" : authorization.deposit_status,
-          status: nextStatus
+          depositStatus: data.get("depositStatus"),
+          maxBid: data.get("maxBid") || undefined,
+          operatorNotes: data.get("operatorNotes"),
+          status: data.get("status"),
+          verificationStatus: data.get("verificationStatus")
         }),
         method: "POST"
       }
     );
     await loadAuthorizations(authorization.auction_id);
     await loadAdmin();
+  }
+
+  async function updateTaskStatus(taskId: string, nextStatus: string) {
+    await adminFetch(`/api/admin/tasks/${taskId}/status`, {
+      body: JSON.stringify({ status: nextStatus }),
+      method: "POST"
+    });
+    if (selectedAuction?.id) await loadTasks(selectedAuction.id);
+  }
+
+  async function resendNotification(notificationId: string) {
+    await adminFetch(`/api/admin/notifications/${notificationId}/send`, {
+      body: JSON.stringify({}),
+      method: "POST"
+    });
+    const payload = await adminFetch<{ notifications: Notification[] }>("/api/admin/notifications");
+    setNotifications(payload.notifications);
   }
 
   return (
@@ -509,6 +573,7 @@ export function AdminConsole() {
                 onChange={(event) => {
                   setSelectedAuctionId(event.target.value);
                   void loadAuthorizations(event.target.value);
+                  void loadTasks(event.target.value);
                 }}
                 value={selectedAuction?.id ?? ""}
               >
@@ -525,17 +590,54 @@ export function AdminConsole() {
                   <div>
                     <strong>{authorization.legal_name}</strong>
                     <span>
-                      {authorization.email} · {authorization.status} · {authorization.deposit_status}
+                      {authorization.email} · {authorization.entity_type} · {authorization.status} · {authorization.deposit_status}
                     </span>
+                    <span>
+                      Verification {authorization.verification_status} · Terms {authorization.terms_version}
+                    </span>
+                    {authorization.deposit_reference ? <span>Deposit: {authorization.deposit_reference}</span> : null}
+                    {authorization.proof_of_funds_url || authorization.bidder_proof_of_funds_url ? (
+                      <span>
+                        Proof: {authorization.proof_of_funds_url || authorization.bidder_proof_of_funds_url}
+                      </span>
+                    ) : null}
+                    {authorization.identity_document_url ? <span>ID: {authorization.identity_document_url}</span> : null}
+                    {authorization.bidder_notes ? <span>Notes: {authorization.bidder_notes}</span> : null}
                   </div>
-                  <div className="admin-actions">
-                    <button onClick={() => decideBidder(authorization, "approved")} title="Approve">
+                  <form className="admin-inline-form" onSubmit={(event) => submitBidderDecision(event, authorization)}>
+                    <select name="status" defaultValue={authorization.status}>
+                      <option value="pending">Pending</option>
+                      <option value="approved">Approved</option>
+                      <option value="rejected">Rejected</option>
+                      <option value="suspended">Suspended</option>
+                    </select>
+                    <select name="depositStatus" defaultValue={authorization.deposit_status}>
+                      <option value="not_required">No deposit</option>
+                      <option value="pending">Deposit pending</option>
+                      <option value="verified">Deposit verified</option>
+                      <option value="waived">Deposit waived</option>
+                    </select>
+                    <select name="verificationStatus" defaultValue={authorization.verification_status}>
+                      <option value="pending">ID pending</option>
+                      <option value="approved">ID approved</option>
+                      <option value="rejected">ID rejected</option>
+                    </select>
+                    <input
+                      name="maxBid"
+                      placeholder="Max bid"
+                      type="number"
+                      defaultValue={authorization.max_bid_cents ? Number(authorization.max_bid_cents) / 100 : ""}
+                    />
+                    <input
+                      name="operatorNotes"
+                      placeholder="Operator notes"
+                      defaultValue={authorization.operator_notes}
+                    />
+                    <button type="submit">
                       <ShieldCheck size={15} />
+                      Save
                     </button>
-                    <button onClick={() => decideBidder(authorization, "rejected")} title="Reject">
-                      Reject
-                    </button>
-                  </div>
+                  </form>
                 </div>
               ))}
             </div>
@@ -559,6 +661,61 @@ export function AdminConsole() {
                     </span>
                   </div>
                   <em>{formatDate(inquiry.created_at)}</em>
+                </div>
+              ))}
+            </div>
+          </article>
+        </section>
+
+        <section className="admin-grid">
+          <article className="admin-panel wide">
+            <div className="panel-head compact">
+              <div>
+                <p className="eyebrow">Close workflow</p>
+                <h2>Post-auction tasks</h2>
+              </div>
+              <ClipboardList size={20} />
+            </div>
+            <div className="admin-table">
+              {tasks.map((task) => (
+                <div className="admin-row" key={task.id}>
+                  <div>
+                    <strong>{task.title}</strong>
+                    <span>
+                      {task.assignee_role} · {task.due_at ? formatDate(task.due_at) : "No due date"}
+                    </span>
+                  </div>
+                  <div className="admin-actions">
+                    <button onClick={() => updateTaskStatus(task.id, "open")}>Open</button>
+                    <button onClick={() => updateTaskStatus(task.id, "blocked")}>Blocked</button>
+                    <button onClick={() => updateTaskStatus(task.id, "done")}>Done</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="admin-panel">
+            <div className="panel-head compact">
+              <div>
+                <p className="eyebrow">Notifications</p>
+                <h2>Outbox</h2>
+              </div>
+              <Mail size={20} />
+            </div>
+            <div className="admin-table">
+              {notifications.map((notification) => (
+                <div className="admin-row stacked-row" key={notification.id}>
+                  <div>
+                    <strong>{notification.subject}</strong>
+                    <span>
+                      {notification.recipient_email} · {notification.event_type} · {notification.status}
+                    </span>
+                    {notification.last_error ? <span>{notification.last_error}</span> : null}
+                  </div>
+                  <div className="admin-actions">
+                    <button onClick={() => resendNotification(notification.id)}>Send</button>
+                  </div>
                 </div>
               ))}
             </div>

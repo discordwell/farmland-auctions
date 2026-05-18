@@ -61,6 +61,24 @@ Smoke test:
 SMOKE_BASE_URL=http://127.0.0.1:3510 npm run test:smoke
 ```
 
+Live flow test with cleanup:
+
+```bash
+ADMIN_API_KEY=... DATABASE_URL=... SMOKE_BASE_URL=https://farmauction.discordwell.com npm run test:live-flow
+```
+
+Optional notification delivery uses SMTP when configured. Without SMTP, notifications are retained in the admin outbox.
+
+```text
+OPS_NOTIFY_EMAIL=ops@example.com
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=<smtp-user>
+SMTP_PASSWORD=
+SMTP_FROM=Wyatt Farmland Auctions <ops@example.com>
+```
+
 ## Deployment
 
 The deployed Caddy root is:
@@ -80,3 +98,11 @@ The API runs under PM2 as `farmauction-api` from:
 ```text
 /opt/farmauction/app
 ```
+
+Database backup helper:
+
+```bash
+deploy/backup-postgres.sh
+```
+
+On OVH-2, run it from cron with `BACKUP_DIR=/opt/farmauction/backups`. The script keeps 14 days of local custom-format PostgreSQL dumps.

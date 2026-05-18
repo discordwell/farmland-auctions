@@ -432,7 +432,13 @@ function BidderRegistration({
   onBidderEmailChange: (email: string) => void;
 }) {
   const [legalName, setLegalName] = useState("");
+  const [entityType, setEntityType] = useState("individual");
   const [phone, setPhone] = useState("");
+  const [mailingAddress, setMailingAddress] = useState("");
+  const [identityDocumentUrl, setIdentityDocumentUrl] = useState("");
+  const [proofOfFundsUrl, setProofOfFundsUrl] = useState("");
+  const [depositReference, setDepositReference] = useState("");
+  const [bidderNotes, setBidderNotes] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -449,8 +455,15 @@ function BidderRegistration({
       const response = await fetch(`/api/auctions/${auction.id}/register`, {
         body: JSON.stringify({
           email: bidderEmail.trim(),
+          bidderNotes: bidderNotes.trim(),
+          depositReference: depositReference.trim(),
+          entityType,
+          identityDocumentUrl: identityDocumentUrl.trim(),
           legalName: legalName.trim(),
+          mailingAddress: mailingAddress.trim(),
           phone: phone.trim() || undefined,
+          proofOfFundsUrl: proofOfFundsUrl.trim(),
+          termsVersion: "2026-05-18",
           termsAccepted
         }),
         headers: {
@@ -493,6 +506,15 @@ function BidderRegistration({
             />
           </label>
           <label>
+            Entity type
+            <select value={entityType} onChange={(event) => setEntityType(event.target.value)}>
+              <option value="individual">Individual</option>
+              <option value="corporation">Corporation</option>
+              <option value="partnership">Partnership</option>
+              <option value="trust">Trust</option>
+            </select>
+          </label>
+          <label>
             Email
             <input
               type="email"
@@ -510,6 +532,39 @@ function BidderRegistration({
               autoComplete="tel"
             />
           </label>
+          <label>
+            Mailing address
+            <textarea
+              value={mailingAddress}
+              onChange={(event) => setMailingAddress(event.target.value)}
+              required
+            />
+          </label>
+          <label>
+            ID document link
+            <input
+              value={identityDocumentUrl}
+              onChange={(event) => setIdentityDocumentUrl(event.target.value)}
+            />
+          </label>
+          <label>
+            Proof of funds link
+            <input
+              value={proofOfFundsUrl}
+              onChange={(event) => setProofOfFundsUrl(event.target.value)}
+            />
+          </label>
+          <label>
+            Deposit reference
+            <input
+              value={depositReference}
+              onChange={(event) => setDepositReference(event.target.value)}
+            />
+          </label>
+          <label>
+            Notes
+            <textarea value={bidderNotes} onChange={(event) => setBidderNotes(event.target.value)} />
+          </label>
           <label className="check-row">
             <input
               type="checkbox"
@@ -517,7 +572,9 @@ function BidderRegistration({
               onChange={(event) => setTermsAccepted(event.target.checked)}
               required
             />
-            <span>I accept the bidder terms for this auction.</span>
+            <span>
+              I accept the <a href="/bidder-terms/">bidder terms</a> for this auction.
+            </span>
           </label>
           <button type="submit" disabled={isSubmitting}>
             <Check size={17} />
@@ -971,10 +1028,13 @@ export function FarmAuctionApp() {
 
       <footer>
         <span>Wyatt Farmland Auctions</span>
-        <a href="mailto:cameron@wyattrealty.ca">
-          Contact
-          <ArrowUpRight size={15} />
-        </a>
+        <div className="footer-links">
+          <a href="/bidder-terms/">Bidder terms</a>
+          <a href="mailto:cameron@wyattrealty.ca">
+            Contact
+            <ArrowUpRight size={15} />
+          </a>
+        </div>
       </footer>
     </main>
   );

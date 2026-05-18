@@ -183,6 +183,26 @@ export async function placeBid(input: PlaceBidInput) {
       throw new ApiError(403, "Bidder is not approved for this auction");
     }
 
+    const maxBidCents =
+      authorization.rows[0].max_bid_cents == null
+        ? null
+        : Number(authorization.rows[0].max_bid_cents);
+    if (maxBidCents != null && input.amountCents > maxBidCents) {
+      const bid = await insertRejectedBid(
+        client,
+        input,
+        bidderId,
+        Number(auction.version),
+        "Bid exceeds approved bidder limit"
+      );
+      return {
+        accepted: false,
+        bid,
+        auction: await loadAuctionState(client, input.auctionId),
+        reason: "Bid exceeds approved bidder limit"
+      };
+    }
+
     const now = Date.now();
     const opensAt = new Date(auction.opens_at as string).getTime();
     const closesAt = new Date(auction.closes_at as string).getTime();

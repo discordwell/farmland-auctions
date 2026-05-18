@@ -13,6 +13,7 @@
     "api:start": "node dist-api/server/index.js",
     "db:migrate": "tsx server/db/migrate.ts",
     "db:seed": "tsx server/db/seed.ts",
+    "test:live-flow": "tsx server/tests/liveFlow.ts",
     "test:smoke": "tsx server/tests/smoke.ts"
   },
   "dependencies": {
@@ -21,6 +22,7 @@
     "fastify": "^5.8.5",
     "lucide-react": "1.16.0",
     "next": "16.2.6",
+    "nodemailer": "^8.0.7",
     "pg": "^8.20.0",
     "react": "19.2.6",
     "react-dom": "19.2.6",
@@ -31,6 +33,7 @@
   },
   "devDependencies": {
     "@types/node": "25.0.0",
+    "@types/nodemailer": "^8.0.0",
     "@types/pg": "^8.20.0",
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",

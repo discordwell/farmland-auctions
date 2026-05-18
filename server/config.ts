@@ -18,7 +18,17 @@ export const config = {
     .filter(Boolean),
   databaseUrl: process.env.DATABASE_URL ?? "",
   host: process.env.API_HOST ?? "127.0.0.1",
-  port: numberFromEnv("API_PORT", 3510)
+  opsNotifyEmail: process.env.OPS_NOTIFY_EMAIL ?? "",
+  port: numberFromEnv("API_PORT", 3510),
+  publicSiteUrl: process.env.PUBLIC_SITE_URL ?? "https://farmauction.discordwell.com",
+  smtp: {
+    from: process.env.SMTP_FROM ?? "",
+    host: process.env.SMTP_HOST ?? "",
+    password: process.env.SMTP_PASSWORD ?? "",
+    port: numberFromEnv("SMTP_PORT", 587),
+    secure: process.env.SMTP_SECURE === "true",
+    user: process.env.SMTP_USER ?? ""
+  }
 };
 
 if (!config.databaseUrl) {

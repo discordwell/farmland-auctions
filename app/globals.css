@@ -432,6 +432,8 @@ h3 {
 .contact-form input,
 .contact-form textarea,
 .registration-form input,
+.registration-form select,
+.registration-form textarea,
 .bid-email,
 .range-filter input,
 .bid-command input {
@@ -890,6 +892,24 @@ h3 {
   padding: 0 11px;
 }
 
+.registration-form select {
+  width: 100%;
+  padding: 0 11px;
+}
+
+.registration-form textarea {
+  min-height: 82px;
+  width: 100%;
+  padding: 10px 11px;
+  resize: vertical;
+}
+
+.registration-form a {
+  color: var(--green-dark);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .registration-form button {
   display: inline-flex;
   align-items: center;
@@ -975,6 +995,12 @@ footer {
   border-top: 1px solid var(--line);
 }
 
+.footer-links {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
 footer a {
   display: inline-flex;
   align-items: center;
@@ -1013,6 +1039,8 @@ footer a {
 .admin-form input,
 .admin-form select,
 .admin-form textarea,
+.admin-inline-form input,
+.admin-inline-form select,
 .admin-panel select {
   min-height: 42px;
   width: 100%;
@@ -1208,6 +1236,33 @@ footer a {
   justify-content: end;
 }
 
+.admin-inline-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.admin-inline-form input,
+.admin-inline-form select {
+  min-width: 0;
+  padding: 0 9px;
+}
+
+.admin-inline-form button {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--green-dark);
+  cursor: pointer;
+  font-weight: 800;
+}
+
 .admin-actions button {
   min-width: 38px;
   min-height: 34px;
@@ -1222,6 +1277,64 @@ footer a {
   place-items: center;
   min-height: 100vh;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.terms-page {
+  min-height: 100vh;
+  padding: clamp(28px, 6vw, 72px) clamp(18px, 4vw, 54px);
+  background: var(--bg);
+}
+
+.terms-shell {
+  max-width: 940px;
+  margin: 0 auto;
+}
+
+.terms-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: clamp(30px, 6vw, 70px);
+}
+
+.terms-head svg {
+  color: var(--green-dark);
+}
+
+.terms-head h1 {
+  max-width: none;
+  margin-bottom: 0;
+  font-size: clamp(2.8rem, 8vw, 6rem);
+}
+
+.terms-intro {
+  max-width: 68ch;
+  color: var(--muted);
+  font-size: 1.08rem;
+  line-height: 1.6;
+}
+
+.terms-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.terms-list article {
+  padding: 18px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.terms-list h2 {
+  font-size: 1.25rem;
+}
+
+.terms-list p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.58;
 }
 
 @media (max-width: 1180px) {
@@ -1389,6 +1502,11 @@ footer a {
     flex-direction: column;
   }
 
+  .footer-links {
+    align-items: start;
+    flex-direction: column;
+  }
+
   .admin-header,
   .admin-key,
   .admin-row {
@@ -1413,5 +1531,9 @@ footer a {
 
   .admin-actions {
     justify-content: start;
+  }
+
+  .admin-inline-form {
+    grid-template-columns: 1fr;
   }
 }

@@ -9,6 +9,7 @@ import { ZodError, z } from "zod";
 import { getAuction, getBidHistory, placeBid } from "./auctionService.js";
 import { config } from "./config.js";
 import { pool, query, withTransaction } from "./db/pool.js";
+import { deliverNotification, enqueueNotification, enqueueNotificationInTransaction } from "./email.js";
 import { ApiError } from "./errors.js";
 import { auctionEvents } from "./realtime.js";
 import { dollarsToCents, serializeAuction, serializeListing } from "./serializers.js";
@@ -38,9 +39,16 @@ const bidBodySchema = z
   });
 
 const registrationBodySchema = z.object({
+  bidderNotes: z.string().max(2000).default(""),
+  depositReference: z.string().max(500).default(""),
   email: z.email(),
+  entityType: z.enum(["individual", "corporation", "partnership", "trust"]).default("individual"),
+  identityDocumentUrl: z.string().max(1000).default(""),
   legalName: z.string().min(2),
+  mailingAddress: z.string().max(1000).default(""),
   phone: z.string().min(7).max(40).optional(),
+  proofOfFundsUrl: z.string().max(1000).default(""),
+  termsVersion: z.string().min(4).max(80).default("2026-05-18"),
   termsAccepted: z.coerce.boolean().default(false)
 });
 
@@ -97,6 +105,8 @@ const adminAuctionBodySchema = z.object({
 
 const idParamSchema = z.object({ id: z.uuid() });
 const auctionIdParamSchema = z.object({ auctionId: z.uuid() });
+const taskIdParamSchema = z.object({ id: z.uuid() });
+const notificationIdParamSchema = z.object({ id: z.uuid() });
 const bidderApprovalParamSchema = z.object({
   auctionId: z.uuid(),
   bidderId: z.uuid()
@@ -210,6 +220,28 @@ async function registerRoutes(app: FastifyInstance) {
     };
   });
 
+  app.get("/api/health/deep", async () => {
+    const result = await query(
+      `
+        SELECT
+          (SELECT count(*)::int FROM listings) AS listings,
+          (SELECT count(*)::int FROM auctions) AS auctions,
+          (SELECT count(*)::int FROM notification_outbox WHERE status IN ('pending', 'failed')) AS notifications_attention
+      `
+    );
+
+    return {
+      checks: {
+        database: "ok",
+        smtpConfigured: Boolean(config.smtp.host && config.smtp.from)
+      },
+      counts: result.rows[0],
+      ok: true,
+      service: "farmauction-api",
+      time: new Date().toISOString()
+    };
+  });
+
   app.get("/api/listings", async (request) => {
     const where = buildListingWhere(request.query);
     const result = await query(
@@ -312,32 +344,63 @@ async function registerRoutes(app: FastifyInstance) {
 
       const bidder = await client.query<{ id: string }>(
         `
-          INSERT INTO bidders (email, legal_name, phone)
-          VALUES (lower($1), $2, $3)
+          INSERT INTO bidders (
+            email, legal_name, phone, entity_type, mailing_address,
+            identity_document_url, proof_of_funds_url
+          )
+          VALUES (lower($1), $2, $3, $4, $5, $6, $7)
           ON CONFLICT (email) DO UPDATE SET
             legal_name = EXCLUDED.legal_name,
             phone = EXCLUDED.phone,
+            entity_type = EXCLUDED.entity_type,
+            mailing_address = EXCLUDED.mailing_address,
+            identity_document_url = EXCLUDED.identity_document_url,
+            proof_of_funds_url = EXCLUDED.proof_of_funds_url,
             updated_at = now()
           RETURNING id
         `,
-        [body.email, body.legalName, body.phone ?? null]
+        [
+          body.email,
+          body.legalName,
+          body.phone ?? null,
+          body.entityType,
+          body.mailingAddress,
+          body.identityDocumentUrl,
+          body.proofOfFundsUrl
+        ]
       );
 
       const authorization = await client.query(
         `
           INSERT INTO auction_bidder_authorizations (
-            auction_id, bidder_id, status, deposit_status, terms_accepted_at
+            auction_id, bidder_id, status, deposit_status, terms_accepted_at,
+            proof_of_funds_url, deposit_reference, terms_version, bidder_notes
           )
-          VALUES ($1, $2, 'pending', 'pending', CASE WHEN $3 THEN now() ELSE NULL END)
+          VALUES (
+            $1, $2, 'pending', 'pending', CASE WHEN $3 THEN now() ELSE NULL END,
+            $4, $5, $6, $7
+          )
           ON CONFLICT (auction_id, bidder_id) DO UPDATE SET
             terms_accepted_at = COALESCE(
               auction_bidder_authorizations.terms_accepted_at,
               EXCLUDED.terms_accepted_at
             ),
+            proof_of_funds_url = EXCLUDED.proof_of_funds_url,
+            deposit_reference = EXCLUDED.deposit_reference,
+            terms_version = EXCLUDED.terms_version,
+            bidder_notes = EXCLUDED.bidder_notes,
             updated_at = now()
           RETURNING *
         `,
-        [params.id, bidder.rows[0].id, body.termsAccepted]
+        [
+          params.id,
+          bidder.rows[0].id,
+          body.termsAccepted,
+          body.proofOfFundsUrl,
+          body.depositReference,
+          body.termsVersion,
+          body.bidderNotes
+        ]
       );
 
       await client.query(
@@ -347,6 +410,21 @@ async function registerRoutes(app: FastifyInstance) {
         `,
         [params.id, bidder.rows[0].id, body.email]
       );
+
+      if (config.opsNotifyEmail) {
+        await enqueueNotificationInTransaction(client, {
+          body: [
+            `Auction: ${params.id}`,
+            `Bidder: ${body.legalName}`,
+            `Email: ${body.email}`,
+            `Deposit reference: ${body.depositReference || "not provided"}`
+          ].join("\n"),
+          eventType: "bidder.registered",
+          metadata: { auctionId: params.id, bidderId: bidder.rows[0].id },
+          recipientEmail: config.opsNotifyEmail,
+          subject: "New bidder registration"
+        });
+      }
 
       return {
         bidderId: bidder.rows[0].id,
@@ -372,6 +450,19 @@ async function registerRoutes(app: FastifyInstance) {
     }
 
     auctionEvents.publish(params.id, "bid.accepted", result);
+    if (config.opsNotifyEmail && result.bid) {
+      await enqueueNotification({
+        body: [
+          `Auction: ${params.id}`,
+          `Bidder: ${result.bid.bidderAlias}`,
+          `Amount: ${result.bid.amountDollars}`
+        ].join("\n"),
+        eventType: "bid.accepted",
+        metadata: { auctionId: params.id, bidId: result.bid.id },
+        recipientEmail: config.opsNotifyEmail,
+        subject: "Accepted auction bid"
+      });
+    }
     return result;
   });
 
@@ -411,6 +502,23 @@ async function registerRoutes(app: FastifyInstance) {
 
       return inquiry.rows[0];
     });
+
+    if (config.opsNotifyEmail) {
+      await enqueueNotification({
+        body: [
+          `Name: ${body.name}`,
+          `Email: ${body.email}`,
+          `Phone: ${body.phone ?? "not provided"}`,
+          `File type: ${body.fileType}`,
+          "",
+          body.message || "No message provided."
+        ].join("\n"),
+        eventType: "contact.created",
+        metadata: { inquiryId: result.id },
+        recipientEmail: config.opsNotifyEmail,
+        subject: "New farmland inquiry"
+      });
+    }
 
     reply.status(201);
     return result;
@@ -725,6 +833,10 @@ async function registerRoutes(app: FastifyInstance) {
           b.email,
           b.legal_name,
           b.phone,
+          b.entity_type,
+          b.mailing_address,
+          b.identity_document_url,
+          b.proof_of_funds_url AS bidder_proof_of_funds_url,
           b.verification_status
         FROM auction_bidder_authorizations aba
         JOIN bidders b ON b.id = aba.bidder_id
@@ -763,22 +875,50 @@ async function registerRoutes(app: FastifyInstance) {
     const params = bidderApprovalParamSchema.parse(request.params);
     const body = z
       .object({
+        maxBid: z.coerce.number().nonnegative().optional(),
+        operatorNotes: z.string().max(2000).default(""),
         status: z.enum(["approved", "rejected", "suspended"]),
         depositStatus: z
           .enum(["not_required", "pending", "verified", "waived"])
-          .default("verified")
+          .default("verified"),
+        verificationStatus: z.enum(["pending", "approved", "rejected"]).default("approved")
       })
       .parse(request.body);
 
-    const result = await query(
-      `
-        UPDATE auction_bidder_authorizations
-        SET status = $1, deposit_status = $2, updated_at = now()
-        WHERE auction_id = $3 AND bidder_id = $4
-        RETURNING *
-      `,
-      [body.status, body.depositStatus, params.auctionId, params.bidderId]
-    );
+    const result = await withTransaction(async (client) => {
+      await client.query(
+        `
+          UPDATE bidders
+          SET verification_status = $1, updated_at = now()
+          WHERE id = $2
+        `,
+        [body.verificationStatus, params.bidderId]
+      );
+
+      return client.query(
+        `
+          UPDATE auction_bidder_authorizations
+          SET
+            status = $1,
+            deposit_status = $2,
+            max_bid_cents = $3,
+            operator_notes = $4,
+            reviewed_at = now(),
+            reviewed_by = 'admin',
+            updated_at = now()
+          WHERE auction_id = $5 AND bidder_id = $6
+          RETURNING *
+        `,
+        [
+          body.status,
+          body.depositStatus,
+          body.maxBid == null ? null : dollarsToCents(body.maxBid),
+          body.operatorNotes,
+          params.auctionId,
+          params.bidderId
+        ]
+      );
+    });
 
     if (!result.rowCount) throw new ApiError(404, "Bidder authorization not found");
     auctionEvents.publish(params.auctionId, "bidder.authorization", result.rows[0]);
@@ -848,6 +988,19 @@ async function registerRoutes(app: FastifyInstance) {
       auction: await loadAuctionForAdmin(auctionId)
     };
     auctionEvents.publish(params.auctionId, "auction.closed", payload);
+    if (config.opsNotifyEmail) {
+      await enqueueNotification({
+        body: [
+          `Auction closed: ${payload.auction.title}`,
+          `Auction ID: ${params.auctionId}`,
+          "Post-close tasks were created in the admin console."
+        ].join("\n"),
+        eventType: "auction.closed",
+        metadata: { auctionId: params.auctionId },
+        recipientEmail: config.opsNotifyEmail,
+        subject: "Auction closed"
+      });
+    }
     return payload;
   });
 
@@ -861,6 +1014,40 @@ async function registerRoutes(app: FastifyInstance) {
     return {
       tasks: result.rows
     };
+  });
+
+  app.post("/api/admin/tasks/:id/status", async (request) => {
+    requireAdmin(request);
+    const params = taskIdParamSchema.parse(request.params);
+    const body = z
+      .object({
+        status: z.enum(["open", "done", "blocked"])
+      })
+      .parse(request.body);
+    const result = await query(
+      "UPDATE post_auction_tasks SET status = $1, updated_at = now() WHERE id = $2 RETURNING *",
+      [body.status, params.id]
+    );
+    if (!result.rowCount) throw new ApiError(404, "Task not found");
+    return {
+      task: result.rows[0]
+    };
+  });
+
+  app.get("/api/admin/notifications", async (request) => {
+    requireAdmin(request);
+    const result = await query(
+      "SELECT * FROM notification_outbox ORDER BY created_at DESC LIMIT 100"
+    );
+    return {
+      notifications: result.rows
+    };
+  });
+
+  app.post("/api/admin/notifications/:id/send", async (request) => {
+    requireAdmin(request);
+    const params = notificationIdParamSchema.parse(request.params);
+    return deliverNotification(params.id);
   });
 
   app.get("/api/admin/inquiries", async (request) => {
