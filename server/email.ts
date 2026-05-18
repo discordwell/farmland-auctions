@@ -8,6 +8,7 @@ type NotificationInput = {
   recipientEmail: string;
   subject: string;
   body: string;
+  htmlBody?: string | null;
   metadata?: Record<string, unknown>;
 };
 
@@ -33,9 +34,9 @@ export async function enqueueNotification(input: NotificationInput) {
   const result = await query<{ id: string }>(
     `
       INSERT INTO notification_outbox (
-        event_type, recipient_email, subject, body, status, metadata
+        event_type, recipient_email, subject, body, html_body, status, metadata
       )
-      VALUES ($1, lower($2), $3, $4, $5, $6::jsonb)
+      VALUES ($1, lower($2), $3, $4, $5, $6, $7::jsonb)
       RETURNING id
     `,
     [
@@ -43,6 +44,7 @@ export async function enqueueNotification(input: NotificationInput) {
       input.recipientEmail,
       input.subject,
       input.body,
+      input.htmlBody ?? null,
       smtpReady() ? "pending" : "queued",
       JSON.stringify(input.metadata ?? {})
     ]
@@ -62,9 +64,9 @@ export async function enqueueNotificationInTransaction(
   const result = await client.query<{ id: string }>(
     `
       INSERT INTO notification_outbox (
-        event_type, recipient_email, subject, body, status, metadata
+        event_type, recipient_email, subject, body, html_body, status, metadata
       )
-      VALUES ($1, lower($2), $3, $4, $5, $6::jsonb)
+      VALUES ($1, lower($2), $3, $4, $5, $6, $7::jsonb)
       RETURNING id
     `,
     [
@@ -72,6 +74,7 @@ export async function enqueueNotificationInTransaction(
       input.recipientEmail,
       input.subject,
       input.body,
+      input.htmlBody ?? null,
       smtpReady() ? "pending" : "queued",
       JSON.stringify(input.metadata ?? {})
     ]
@@ -102,7 +105,8 @@ export async function deliverNotification(id: string) {
       from: config.smtp.from,
       to: row.recipient_email as string,
       subject: row.subject as string,
-      text: row.body as string
+      text: row.body as string,
+      html: row.html_body ? (row.html_body as string) : undefined
     });
 
     await query(
@@ -115,14 +119,52 @@ export async function deliverNotification(id: string) {
     );
     return { delivered: true };
   } catch (error) {
+    const message = error instanceof Error ? error.message : "SMTP delivery failed";
+    // attempts column added in migration 005; default 0. Exponential backoff capped at 30 min.
     await query(
       `
         UPDATE notification_outbox
-        SET status = 'failed', last_error = $2, updated_at = now()
+        SET status = 'failed',
+            attempts = COALESCE(attempts, 0) + 1,
+            last_error = $2,
+            next_attempt_at = now() + (LEAST(power(2, COALESCE(attempts, 0)), 30) * interval '1 minute'),
+            updated_at = now()
         WHERE id = $1
       `,
-      [id, error instanceof Error ? error.message : "SMTP delivery failed"]
+      [id, message]
     );
     throw error;
   }
+}
+
+/**
+ * Drain pending/queued/failed notifications eligible for retry.
+ * Caller decides cadence (the in-process worker calls every 30s).
+ */
+export async function drainOutbox(limit = 20) {
+  if (!smtpReady()) return { drained: 0, skipped: 0 };
+
+  const due = await query<{ id: string }>(
+    `
+      SELECT id FROM notification_outbox
+      WHERE status IN ('pending', 'queued', 'failed')
+        AND COALESCE(attempts, 0) < 5
+        AND (next_attempt_at IS NULL OR next_attempt_at <= now())
+      ORDER BY created_at ASC
+      LIMIT $1
+    `,
+    [limit]
+  );
+
+  let drained = 0;
+  let skipped = 0;
+  for (const row of due.rows) {
+    try {
+      await deliverNotification(row.id);
+      drained += 1;
+    } catch {
+      skipped += 1;
+    }
+  }
+  return { drained, skipped };
 }

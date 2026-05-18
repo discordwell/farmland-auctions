@@ -56,11 +56,25 @@ type BidRow = {
   created_at: string;
 };
 
+type WatchlistRow = {
+  id: string;
+  slug: string;
+  title: string;
+  rm: string;
+  region: string;
+  acres: number;
+  pricePerAcre: number;
+  status: string;
+  image: string;
+  watchedAt: string;
+};
+
 type SummaryPayload = {
   user: SummaryUser;
   bidder: Bidder | null;
   registrations: Registration[];
   bids: BidRow[];
+  watchlist?: WatchlistRow[];
 };
 
 const cad = new Intl.NumberFormat("en-CA", {
@@ -181,6 +195,7 @@ export default function AccountPage() {
   const bidder = summary?.bidder ?? null;
   const registrations = summary?.registrations ?? [];
   const bids = summary?.bids ?? [];
+  const watchlist = summary?.watchlist ?? [];
 
   return (
     <main>
@@ -418,6 +433,47 @@ export default function AccountPage() {
             </article>
           </div>
         ) : null}
+
+        <article className="admin-panel">
+          <div className="admin-panel-head">
+            <div>
+              <p className="pre">Watchlist</p>
+              <h2>
+                Saved <em>lots</em>
+              </h2>
+            </div>
+            <span className="ornament">
+              {watchlist.length} {watchlist.length === 1 ? "lot" : "lots"}
+            </span>
+          </div>
+          <div className="admin-table">
+            {watchlist.length ? (
+              watchlist.map((row) => (
+                <div className="admin-row stacked" key={row.id}>
+                  <div>
+                    <strong>
+                      <a href={`/listings/?slug=${encodeURIComponent(row.slug)}`}>{row.title}</a>
+                    </strong>
+                    <span>
+                      {row.rm} · {row.acres.toLocaleString()} ac · {cad.format(row.pricePerAcre)}/ac
+                    </span>
+                    <span>Saved {formatDate(row.watchedAt)}</span>
+                  </div>
+                  <div className="account-row-side">
+                    <span className={`lot-status s-${statusSlug(row.status)}`}>
+                      <span className="swatch" />
+                      {row.status}
+                    </span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="admin-empty">
+                Open a lot and tap the heart icon to save it here.
+              </div>
+            )}
+          </div>
+        </article>
       </section>
 
       <footer className="colophon">

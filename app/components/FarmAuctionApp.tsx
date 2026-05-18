@@ -130,7 +130,17 @@ function CompassRose() {
   );
 }
 
-function LotCard({ listing, lotIndex }: { listing: Listing; lotIndex: number }) {
+function LotCard({
+  listing,
+  lotIndex,
+  watched,
+  onToggleWatch
+}: {
+  listing: Listing;
+  lotIndex: number;
+  watched: boolean;
+  onToggleWatch: (listing: Listing) => void;
+}) {
   const lotNo = formatLotNumber(lotIndex);
   const statusKey = statusSlug(listing.status);
   const soilGap = Math.max(0, Math.min(100, 100 - listing.soilRating));
@@ -147,6 +157,17 @@ function LotCard({ listing, lotIndex }: { listing: Listing; lotIndex: number }) 
           <span className="swatch"></span>
           {listing.status}
         </span>
+        {!isWanted && listing.slug ? (
+          <button
+            type="button"
+            className={`lot-watch${watched ? " on" : ""}`}
+            onClick={() => onToggleWatch(listing)}
+            aria-label={watched ? "Remove from watchlist" : "Save to watchlist"}
+            title={watched ? "Saved · click to remove" : "Save to watchlist"}
+          >
+            {watched ? "★" : "☆"}
+          </button>
+        ) : null}
       </div>
       <div className="lot-head">
         <div>
@@ -802,6 +823,97 @@ export function FarmAuctionApp() {
   const [newsletterEmail, setNewsletterEmail] = useState("");
   const [newsletterStatus, setNewsletterStatus] = useState("");
   const [newsletterError, setNewsletterError] = useState("");
+  const [watchedSlugs, setWatchedSlugs] = useState<Set<string>>(new Set());
+
+  function readLocalWatchlist(): string[] {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem("farmauction-watchlist");
+      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+      return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === "string") : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function writeLocalWatchlist(slugs: Iterable<string>) {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("farmauction-watchlist", JSON.stringify(Array.from(slugs)));
+    } catch {
+      /* localStorage full or blocked — silently ignore */
+    }
+  }
+
+  useEffect(() => {
+    if (authStatus !== "ready") return;
+    if (!user) {
+      setWatchedSlugs(new Set(readLocalWatchlist()));
+      return;
+    }
+    let cancelled = false;
+    const localSlugs = readLocalWatchlist();
+    const sync = async () => {
+      if (localSlugs.length) {
+        try {
+          await fetch("/api/me/watchlist/sync", {
+            method: "POST",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ slugs: localSlugs })
+          });
+          window.localStorage.removeItem("farmauction-watchlist");
+        } catch {
+          /* leave local state in place; we'll retry next login */
+        }
+      }
+      try {
+        const response = await fetch("/api/me/summary", { credentials: "include" });
+        if (!response.ok) return;
+        const payload = (await response.json()) as { watchlist?: Array<{ slug: string }> };
+        if (cancelled) return;
+        setWatchedSlugs(new Set(payload.watchlist?.map((row) => row.slug) ?? []));
+      } catch {
+        /* ignore */
+      }
+    };
+    sync();
+    return () => {
+      cancelled = true;
+    };
+  }, [authStatus, user?.id]);
+
+  async function toggleWatch(listing: Listing) {
+    if (!listing.slug) return;
+    const slug = listing.slug;
+    const next = new Set(watchedSlugs);
+    const wasWatched = next.has(slug);
+    if (wasWatched) {
+      next.delete(slug);
+    } else {
+      next.add(slug);
+    }
+    setWatchedSlugs(next);
+
+    if (!user) {
+      writeLocalWatchlist(next);
+      return;
+    }
+    try {
+      await fetch(`/api/me/watchlist/${listing.id}`, {
+        method: wasWatched ? "DELETE" : "POST",
+        credentials: "include"
+      });
+    } catch {
+      // Roll back on failure
+      setWatchedSlugs((current) => {
+        const rolled = new Set(current);
+        if (wasWatched) rolled.add(slug);
+        else rolled.delete(slug);
+        return rolled;
+      });
+    }
+  }
 
   useEffect(() => {
     setIsListingsLoading(true);
@@ -1347,7 +1459,13 @@ export function FarmAuctionApp() {
           <div className="lot-grid">
             {filteredListings.length ? (
               filteredListings.map((listing) => (
-                <LotCard listing={listing} lotIndex={lotNumberFor(listing.id)} key={listing.id} />
+                <LotCard
+                  listing={listing}
+                  lotIndex={lotNumberFor(listing.id)}
+                  watched={listing.slug ? watchedSlugs.has(listing.slug) : false}
+                  onToggleWatch={toggleWatch}
+                  key={listing.id}
+                />
               ))
             ) : (
               <div className="lot-empty">

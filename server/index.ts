@@ -25,6 +25,13 @@ import { getAuction, getBidHistory, placeBid } from "./auctionService.js";
 import { config } from "./config.js";
 import { pool, query, withTransaction } from "./db/pool.js";
 import { deliverNotification, enqueueNotification, enqueueNotificationInTransaction } from "./email.js";
+import {
+  auctionClosedEmail,
+  bidderDecisionEmail,
+  bidderRegistrationConfirmation,
+  outbidNotice
+} from "./emailTemplates.js";
+import { startNotificationWorker, stopNotificationWorker } from "./notificationWorker.js";
 import { ApiError } from "./errors.js";
 import { auctionEvents } from "./realtime.js";
 import { dollarsToCents, serializeAuction, serializeListing } from "./serializers.js";
@@ -378,12 +385,107 @@ async function registerRoutes(app: FastifyInstance) {
         )
       : { rows: [] };
 
+    const watchlist = await query(
+      `
+        SELECT
+          l.id, l.slug, l.title, l.rm, l.region, l.acres,
+          l.price_per_acre_cents, l.status, l.hero_image_url,
+          w.created_at AS watched_at
+        FROM bidder_watchlist w
+        JOIN listings l ON l.id = w.listing_id
+        WHERE w.user_id = $1
+        ORDER BY w.created_at DESC
+      `,
+      [user.id]
+    );
+
     return {
       user,
       bidder,
       registrations: registrations.rows,
-      bids: bids.rows
+      bids: bids.rows,
+      watchlist: watchlist.rows.map((row) => ({
+        id: row.id,
+        slug: row.slug,
+        title: row.title,
+        rm: row.rm,
+        region: row.region,
+        acres: Number(row.acres),
+        pricePerAcre: Number(row.price_per_acre_cents) / 100,
+        status: row.status,
+        image: row.hero_image_url,
+        watchedAt: row.watched_at
+      }))
     };
+  });
+
+  app.post("/api/me/watchlist/:listingId", async (request, reply) => {
+    const user = await requireUser(request);
+    const { listingId } = z
+      .object({ listingId: z.uuid() })
+      .parse(request.params);
+
+    const exists = await query("SELECT 1 FROM listings WHERE id = $1", [listingId]);
+    if (!exists.rowCount) {
+      reply.status(404);
+      return { message: "Listing not found" };
+    }
+
+    await query(
+      `
+        INSERT INTO bidder_watchlist (user_id, listing_id)
+        VALUES ($1, $2)
+        ON CONFLICT (user_id, listing_id) DO NOTHING
+      `,
+      [user.id, listingId]
+    );
+    reply.status(201);
+    return { ok: true };
+  });
+
+  app.delete("/api/me/watchlist/:listingId", async (request) => {
+    const user = await requireUser(request);
+    const { listingId } = z
+      .object({ listingId: z.uuid() })
+      .parse(request.params);
+
+    await query("DELETE FROM bidder_watchlist WHERE user_id = $1 AND listing_id = $2", [
+      user.id,
+      listingId
+    ]);
+    return { ok: true };
+  });
+
+  app.post("/api/me/watchlist/sync", async (request) => {
+    const user = await requireUser(request);
+    const { slugs } = z
+      .object({ slugs: z.array(z.string().min(1).max(120)).max(200).default([]) })
+      .parse(request.body);
+
+    if (!slugs.length) return { added: 0 };
+
+    const ids = await query(
+      "SELECT id FROM listings WHERE slug = ANY($1::text[])",
+      [slugs]
+    );
+    if (!ids.rowCount) return { added: 0 };
+
+    const values: string[] = [];
+    const params: string[] = [user.id];
+    ids.rows.forEach((row, idx) => {
+      params.push(row.id as string);
+      values.push(`($1, $${idx + 2})`);
+    });
+
+    await query(
+      `
+        INSERT INTO bidder_watchlist (user_id, listing_id)
+        VALUES ${values.join(", ")}
+        ON CONFLICT DO NOTHING
+      `,
+      params
+    );
+    return { added: ids.rowCount };
   });
 
   app.get("/api/health", async () => {
@@ -514,7 +616,7 @@ async function registerRoutes(app: FastifyInstance) {
     const sessionUser = await getSessionUser(request);
 
     return withTransaction(async (client) => {
-      const auction = await client.query("SELECT id FROM auctions WHERE id = $1", [
+      const auction = await client.query("SELECT id, title FROM auctions WHERE id = $1", [
         params.id
       ]);
       if (!auction.rowCount) throw new ApiError(404, "Auction not found");
@@ -598,12 +700,29 @@ async function registerRoutes(app: FastifyInstance) {
             `Email: ${body.email}`,
             `Deposit reference: ${body.depositReference || "not provided"}`
           ].join("\n"),
-          eventType: "bidder.registered",
+          eventType: "bidder.registered.ops",
           metadata: { auctionId: params.id, bidderId: bidder.rows[0].id },
           recipientEmail: config.opsNotifyEmail,
           subject: "New bidder registration"
         });
       }
+
+      // Confirmation email to the bidder
+      const auctionTitle = (auction.rows[0]?.title as string) ?? "Wyatt Farmland Auctions";
+      const confirmation = bidderRegistrationConfirmation({
+        bidderEmail: body.email,
+        bidderName: body.legalName,
+        auctionTitle,
+        auctionId: params.id
+      });
+      await enqueueNotificationInTransaction(client, {
+        eventType: "bidder.registered",
+        metadata: { auctionId: params.id, bidderId: bidder.rows[0].id },
+        recipientEmail: body.email,
+        subject: confirmation.subject,
+        body: confirmation.body,
+        htmlBody: confirmation.htmlBody
+      });
 
       return {
         bidderId: bidder.rows[0].id,
@@ -637,11 +756,69 @@ async function registerRoutes(app: FastifyInstance) {
           `Bidder: ${result.bid.bidderAlias}`,
           `Amount: ${result.bid.amountDollars}`
         ].join("\n"),
-        eventType: "bid.accepted",
+        eventType: "bid.accepted.ops",
         metadata: { auctionId: params.id, bidId: result.bid.id },
         recipientEmail: config.opsNotifyEmail,
         subject: "Accepted auction bid"
       });
+    }
+
+    // Outbid notice to the previous high bidder (different bidder than the new one).
+    // Throttle: skip if we sent one in the last 60s for this auction+bidder.
+    if (result.bid && result.bid.bidderId) {
+      const prior = await query<{
+        prior_amount_cents: string;
+        prior_email: string;
+        prior_name: string;
+        auction_title: string;
+      }>(
+        `
+          SELECT b.amount_cents AS prior_amount_cents,
+                 bd.email       AS prior_email,
+                 bd.legal_name  AS prior_name,
+                 a.title        AS auction_title
+          FROM bid_events b
+          JOIN bidders bd ON bd.id = b.bidder_id
+          JOIN auctions a ON a.id = b.auction_id
+          WHERE b.auction_id = $1
+            AND b.accepted = true
+            AND b.bidder_id <> $2
+          ORDER BY b.amount_cents DESC, b.created_at DESC
+          LIMIT 1
+        `,
+        [params.id, result.bid.bidderId]
+      );
+      if (prior.rowCount && prior.rows[0]) {
+        const previous = prior.rows[0];
+        const recentSent = await query(
+          `
+            SELECT 1 FROM notification_outbox
+            WHERE event_type = 'bid.outbid'
+              AND lower(recipient_email) = lower($1)
+              AND metadata->>'auctionId' = $2
+              AND created_at > now() - interval '60 seconds'
+            LIMIT 1
+          `,
+          [previous.prior_email, params.id]
+        );
+        if (!recentSent.rowCount) {
+          const tpl = outbidNotice({
+            bidderEmail: previous.prior_email,
+            bidderName: previous.prior_name,
+            auctionTitle: previous.auction_title,
+            previousAmountCents: Number(previous.prior_amount_cents),
+            newHighAmountCents: result.bid.amountCents
+          });
+          await enqueueNotification({
+            eventType: "bid.outbid",
+            metadata: { auctionId: params.id, bidId: result.bid.id },
+            recipientEmail: previous.prior_email,
+            subject: tpl.subject,
+            body: tpl.body,
+            htmlBody: tpl.htmlBody
+          });
+        }
+      }
     }
     return result;
   });
@@ -1102,6 +1279,41 @@ async function registerRoutes(app: FastifyInstance) {
 
     if (!result.rowCount) throw new ApiError(404, "Bidder authorization not found");
     auctionEvents.publish(params.auctionId, "bidder.authorization", result.rows[0]);
+
+    // Email the bidder about the decision
+    const bidderLookup = await query<{
+      email: string;
+      legal_name: string;
+      title: string;
+    }>(
+      `
+        SELECT b.email, b.legal_name, a.title
+        FROM bidders b
+        JOIN auctions a ON a.id = $1
+        WHERE b.id = $2
+      `,
+      [params.auctionId, params.bidderId]
+    );
+    if (bidderLookup.rowCount && bidderLookup.rows[0]) {
+      const bidder = bidderLookup.rows[0];
+      const tpl = bidderDecisionEmail({
+        bidderEmail: bidder.email,
+        bidderName: bidder.legal_name,
+        auctionTitle: bidder.title,
+        auctionId: params.auctionId,
+        decision: body.status,
+        operatorNotes: body.operatorNotes || undefined
+      });
+      await enqueueNotification({
+        eventType: `bidder.${body.status}`,
+        metadata: { auctionId: params.auctionId, bidderId: params.bidderId },
+        recipientEmail: bidder.email,
+        subject: tpl.subject,
+        body: tpl.body,
+        htmlBody: tpl.htmlBody
+      });
+    }
+
     return {
       authorization: result.rows[0]
     };
@@ -1175,12 +1387,45 @@ async function registerRoutes(app: FastifyInstance) {
           `Auction ID: ${params.auctionId}`,
           "Post-close tasks were created in the admin console."
         ].join("\n"),
-        eventType: "auction.closed",
+        eventType: "auction.closed.ops",
         metadata: { auctionId: params.auctionId },
         recipientEmail: config.opsNotifyEmail,
         subject: "Auction closed"
       });
     }
+
+    // Won/lost emails to each approved bidder. The high bidder gets a "won" email.
+    const winnerId = payload.auction.currentHighBidderId ?? null;
+    const winningCents = payload.auction.currentHighBidCents ?? 0;
+    const participants = await query<{ email: string; legal_name: string; bidder_id: string }>(
+      `
+        SELECT DISTINCT bd.id AS bidder_id, bd.email, bd.legal_name
+        FROM auction_bidder_authorizations aba
+        JOIN bidders bd ON bd.id = aba.bidder_id
+        WHERE aba.auction_id = $1 AND aba.status = 'approved'
+      `,
+      [params.auctionId]
+    );
+    if (winningCents > 0) {
+      for (const participant of participants.rows) {
+        const tpl = auctionClosedEmail({
+          bidderEmail: participant.email,
+          bidderName: participant.legal_name,
+          auctionTitle: payload.auction.title,
+          winningAmountCents: winningCents,
+          isWinner: participant.bidder_id === winnerId
+        });
+        await enqueueNotification({
+          eventType: participant.bidder_id === winnerId ? "auction.won" : "auction.lost",
+          metadata: { auctionId: params.auctionId, bidderId: participant.bidder_id },
+          recipientEmail: participant.email,
+          subject: tpl.subject,
+          body: tpl.body,
+          htmlBody: tpl.htmlBody
+        });
+      }
+    }
+
     return payload;
   });
 
@@ -1310,6 +1555,7 @@ export async function buildServer() {
 const app = await buildServer();
 
 const shutdown = async () => {
+  stopNotificationWorker();
   await app.close();
   await pool.end();
 };
@@ -1321,3 +1567,5 @@ await app.listen({
   host: config.host,
   port: config.port
 });
+
+startNotificationWorker();

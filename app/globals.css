@@ -903,6 +903,40 @@ section.band + section.band {
   color: var(--paper);
 }
 
+.lot-watch {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  background: rgba(239, 231, 211, 0.92);
+  border: var(--hair-soft);
+  border-radius: 2px;
+  font-family: var(--serif);
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--mute);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.lot-watch:hover {
+  color: var(--wheat);
+  border-color: var(--wheat);
+}
+.lot-watch.on {
+  color: var(--wheat);
+  border-color: var(--wheat);
+  background: rgba(239, 231, 211, 0.98);
+}
+
+.lot-media:has(.lot-watch) .lot-status {
+  top: 52px;
+}
+
 .lot-status {
   position: absolute;
   top: 14px;
