@@ -85,6 +85,17 @@ const HERO = "/images/hero-fields.jpg";
 const SAT = "/images/satellite-fields.jpg";
 const HARVEST = "/images/harvest.jpg";
 
+// Per-lot art (under public/images/lots/) generated for the demo.
+// Lots that don't have bespoke art fall back to the stock hero/harvest images.
+const lotArt = {
+  lipton: "/images/lots/lipton-half-section.png",
+  caron: "/images/lots/caron-north-quarter.png",
+  vanscoy: "/images/lots/vanscoy-three-quarter.png",
+  coalfields: "/images/lots/coalfields-pasture.png",
+  buckland: "/images/lots/buckland-section.png",
+  snipeLake: "/images/lots/snipe-lake-wanted.png"
+};
+
 const listings: SeedListing[] = [
   {
     slug: "lipton-half-section",
@@ -104,7 +115,7 @@ const listings: SeedListing[] = [
     status: "For Sale",
     latitude: 50.93,
     longitude: -103.83,
-    image: HERO,
+    image: lotArt.lipton,
     satellite: SAT,
     description:
       "Two contiguous quarters of brown chernozem, cultivated and seeded continuously since 2014. Surface lease income.",
@@ -135,7 +146,7 @@ const listings: SeedListing[] = [
     status: "Pending",
     latitude: 50.4,
     longitude: -105.8,
-    image: HERO,
+    image: lotArt.caron,
     satellite: SAT,
     description:
       "Quarter section currently in pulse rotation. Offer accepted, conditions removing.",
@@ -164,7 +175,7 @@ const listings: SeedListing[] = [
     status: "For Sale",
     latitude: 52.02,
     longitude: -107.07,
-    image: HARVEST,
+    image: lotArt.vanscoy,
     satellite: SAT,
     description:
       "Mixed grain and pasture across three quarters. 320 cultivated, 140 native pasture, fenced.",
@@ -194,7 +205,7 @@ const listings: SeedListing[] = [
     status: "Lease",
     latitude: 49.2,
     longitude: -103.05,
-    image: HARVEST,
+    image: lotArt.coalfields,
     satellite: SAT,
     description:
       "Three-year grazing lease on native pasture. Stocking rate 0.6 AUM/ac.",
@@ -224,7 +235,7 @@ const listings: SeedListing[] = [
     status: "Sold",
     latitude: 53.3,
     longitude: -105.75,
-    image: HARVEST,
+    image: lotArt.buckland,
     satellite: SAT,
     description:
       "Full section sold April 14 to a neighbouring operator. Closing record on file.",
@@ -254,7 +265,7 @@ const listings: SeedListing[] = [
     status: "Wanted",
     latitude: 51.92,
     longitude: -107.43,
-    image: HARVEST,
+    image: lotArt.snipeLake,
     satellite: SAT,
     description:
       "Qualified buyer seeking 160+ acres in Twp 30–31 W3. Cash, 30-day close.",
