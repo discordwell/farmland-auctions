@@ -23,7 +23,6 @@ type SeedListing = {
 
 const HERO = "/images/hero-fields.jpg";
 const SAT = "/images/satellite-fields.jpg";
-const PASTURE = "/images/pasture.jpg";
 const HARVEST = "/images/harvest.jpg";
 
 const listings: SeedListing[] = [
@@ -65,7 +64,7 @@ const listings: SeedListing[] = [
     status: "Pending",
     latitude: 50.4,
     longitude: -105.8,
-    image: SAT,
+    image: HERO,
     satellite: SAT,
     description:
       "Quarter section currently in pulse rotation. Offer accepted, conditions removing.",
@@ -89,7 +88,7 @@ const listings: SeedListing[] = [
     status: "For Sale",
     latitude: 52.02,
     longitude: -107.07,
-    image: PASTURE,
+    image: HARVEST,
     satellite: SAT,
     description:
       "Mixed grain and pasture across three quarters. 320 cultivated, 160 native grass, fenced.",
@@ -114,7 +113,7 @@ const listings: SeedListing[] = [
     status: "Lease",
     latitude: 49.2,
     longitude: -103.05,
-    image: PASTURE,
+    image: HARVEST,
     satellite: SAT,
     description:
       "Three-year grazing lease on native pasture. Stocking rate 0.6 AUM/ac.",
@@ -163,7 +162,7 @@ const listings: SeedListing[] = [
     status: "Wanted",
     latitude: 51.92,
     longitude: -107.43,
-    image: PASTURE,
+    image: HARVEST,
     satellite: SAT,
     description:
       "Qualified buyer seeking 160+ acres in Twp 30–31. Cash, 30-day close.",
@@ -234,7 +233,7 @@ const listings: SeedListing[] = [
     status: "Lease",
     latitude: 52.85,
     longitude: -102.4,
-    image: PASTURE,
+    image: HARVEST,
     satellite: SAT,
     description: "Five-year community pasture lease on 480 ac aspen parkland.",
     highlights: [
