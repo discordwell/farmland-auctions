@@ -114,14 +114,14 @@ function prettyStatus(value: string | null | undefined) {
 
 function listingHref(registration: Registration) {
   if (registration.listing_slug) {
-    return `/listings/?slug=${encodeURIComponent(registration.listing_slug)}`;
+    return `/listings/${encodeURIComponent(registration.listing_slug)}/`;
   }
   return "/#floor";
 }
 
 function bidHref(bid: BidRow) {
   if (bid.listing_slug) {
-    return `/listings/?slug=${encodeURIComponent(bid.listing_slug)}`;
+    return `/listings/${encodeURIComponent(bid.listing_slug)}/`;
   }
   return "/#floor";
 }
@@ -452,7 +452,7 @@ export default function AccountPage() {
                 <div className="admin-row stacked" key={row.id}>
                   <div>
                     <strong>
-                      <a href={`/listings/?slug=${encodeURIComponent(row.slug)}`}>{row.title}</a>
+                      <a href={`/listings/${encodeURIComponent(row.slug)}/`}>{row.title}</a>
                     </strong>
                     <span>
                       {row.rm} · {row.acres.toLocaleString()} ac · {cad.format(row.pricePerAcre)}/ac

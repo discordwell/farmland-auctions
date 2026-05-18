@@ -20,6 +20,14 @@ export type Listing = {
   description?: string;
   highlights: string[];
   photos?: Array<{ url: string; caption?: string }>;
+  waterSource?: string;
+  currentOperator?: string;
+  lastSalePrice?: number | null;
+  lastSaleDate?: string | null;
+  zoning?: string;
+  mineralRights?: string;
+  encumbrances?: string;
+  seoDescription?: string;
   publishedAt?: string | null;
   updatedAt?: string;
 };

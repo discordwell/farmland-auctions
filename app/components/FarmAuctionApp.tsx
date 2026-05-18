@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { Menu, X } from "lucide-react";
 import { type Listing, type ListingStatus } from "../data";
@@ -10,6 +10,17 @@ const LeafletMap = dynamic(() => import("./LeafletMap").then((m) => m.LeafletMap
   ssr: false,
   loading: () => <div className="leaflet-host" aria-label="Loading map" />
 });
+
+const SORT_OPTIONS = [
+  { value: "newest", label: "Newest" },
+  { value: "ppa-asc", label: "$ / ac · low → high" },
+  { value: "ppa-desc", label: "$ / ac · high → low" },
+  { value: "acres-desc", label: "Acres · high → low" },
+  { value: "soil-desc", label: "Soil · high → low" }
+] as const;
+type SortKey = (typeof SORT_OPTIONS)[number]["value"];
+
+const ALL_STATUSES: ListingStatus[] = ["For Sale", "Pending", "Sold", "Wanted", "Lease"];
 
 const statuses: Array<ListingStatus | "All"> = [
   "All",
@@ -214,8 +225,8 @@ function LotCard({
             Submit a file →
           </a>
         ) : listing.slug ? (
-          <a className="view" href={`/listings/?slug=${encodeURIComponent(listing.slug)}`}>
-            {listing.status === "Sold" ? "Closing record →" : "View file →"}
+          <a className="view" href={`/listings/${encodeURIComponent(listing.slug)}/`}>
+            {listing.status === "Sold" ? "Closing record →" : "View lot →"}
           </a>
         ) : (
           <a className="view" href="#procurement">
@@ -782,6 +793,8 @@ export function FarmAuctionApp() {
   const [minAcres, setMinAcres] = useState("");
   const [minSoilRating, setMinSoilRating] = useState("");
   const [maxPricePerAcre, setMaxPricePerAcre] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("newest");
   const [mobileNav, setMobileNav] = useState(false);
   const [backendListings, setBackendListings] = useState<Listing[]>([]);
   const [isListingsLoading, setIsListingsLoading] = useState(true);
@@ -958,20 +971,71 @@ export function FarmAuctionApp() {
     });
   }
 
+  // URL-state sync — read from URL on mount + on popstate/hashchange, and write back on every filter change.
+  const skipNextUrlWrite = useRef(true);
   useEffect(() => {
-    function applyHashFilter() {
+    function readFromUrl() {
+      // Prefer query string; fall back to fragment query (legacy footer links use `#inventory?status=Sold`)
+      const queryParams = new URLSearchParams(window.location.search);
+      let fragParams: URLSearchParams | null = null;
       const hash = window.location.hash;
-      const match = /status=([^&]+)/i.exec(hash);
-      if (!match) return;
-      const raw = decodeURIComponent(match[1]);
-      const allowed: ListingStatus[] = ["For Sale", "Pending", "Sold", "Wanted", "Lease"];
-      const matched = allowed.find((s) => s.toLowerCase() === raw.toLowerCase());
-      if (matched) setStatus([matched]);
+      const fragMatch = /\?(.+)$/.exec(hash);
+      if (fragMatch) fragParams = new URLSearchParams(fragMatch[1]);
+
+      const get = (key: string) =>
+        queryParams.get(key) ?? fragParams?.get(key) ?? "";
+
+      const rawStatus = get("status");
+      if (rawStatus) {
+        const parsed = rawStatus
+          .split(",")
+          .map((s) => decodeURIComponent(s.trim()))
+          .filter((s): s is ListingStatus => ALL_STATUSES.includes(s as ListingStatus));
+        setStatus(parsed.length ? parsed : ["All"]);
+      } else {
+        setStatus(["All"]);
+      }
+      setRegion(get("region") || "All");
+      setPropertyType(get("type") || "All");
+      setMinAcres(get("minAcres") || "");
+      setMinSoilRating(get("minSoil") || "");
+      setMaxPricePerAcre(get("maxPpa") || "");
+      setSearchQuery(get("q") || "");
+      const rawSort = get("sort") as SortKey;
+      setSortKey(SORT_OPTIONS.some((opt) => opt.value === rawSort) ? rawSort : "newest");
+      // The state setters above will trigger the write-back effect — suppress one round trip.
+      skipNextUrlWrite.current = true;
     }
-    applyHashFilter();
-    window.addEventListener("hashchange", applyHashFilter);
-    return () => window.removeEventListener("hashchange", applyHashFilter);
+    readFromUrl();
+    window.addEventListener("popstate", readFromUrl);
+    window.addEventListener("hashchange", readFromUrl);
+    return () => {
+      window.removeEventListener("popstate", readFromUrl);
+      window.removeEventListener("hashchange", readFromUrl);
+    };
   }, []);
+
+  // Write filter state back to the URL — replaceState so each keystroke doesn't pollute history.
+  useEffect(() => {
+    if (skipNextUrlWrite.current) {
+      skipNextUrlWrite.current = false;
+      return;
+    }
+    const params = new URLSearchParams();
+    if (status.length && !status.includes("All")) params.set("status", status.join(","));
+    if (region !== "All") params.set("region", region);
+    if (propertyType !== "All") params.set("type", propertyType);
+    if (minAcres) params.set("minAcres", minAcres);
+    if (minSoilRating) params.set("minSoil", minSoilRating);
+    if (maxPricePerAcre) params.set("maxPpa", maxPricePerAcre);
+    if (searchQuery.trim()) params.set("q", searchQuery.trim());
+    if (sortKey !== "newest") params.set("sort", sortKey);
+    const queryString = params.toString();
+    const newUrl = `${window.location.pathname}${queryString ? `?${queryString}` : ""}${window.location.hash}`;
+    if (newUrl !== window.location.pathname + window.location.search + window.location.hash) {
+      window.history.replaceState(null, "", newUrl);
+    }
+  }, [status, region, propertyType, minAcres, minSoilRating, maxPricePerAcre, searchQuery, sortKey]);
 
   async function submitContact(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1027,15 +1091,66 @@ export function FarmAuctionApp() {
     }
   }
 
-  const filteredListings = backendListings.filter((listing) => {
-    const statusMatch = status.includes("All") || status.includes(listing.status);
-    const regionMatch = region === "All" || region === listing.region;
-    const typeMatch = propertyType === "All" || listing.type === propertyType;
-    const acresMatch = !minAcres || listing.acres >= Number(minAcres);
-    const soilMatch = !minSoilRating || listing.soilRating >= Number(minSoilRating);
-    const priceMatch = !maxPricePerAcre || listing.pricePerAcre <= Number(maxPricePerAcre);
-    return statusMatch && regionMatch && typeMatch && acresMatch && soilMatch && priceMatch;
-  });
+  const filteredListings = useMemo(() => {
+    const lc = searchQuery.trim().toLowerCase();
+    const filtered = backendListings.filter((listing) => {
+      const statusMatch = status.includes("All") || status.includes(listing.status);
+      const regionMatch = region === "All" || region === listing.region;
+      const typeMatch = propertyType === "All" || listing.type === propertyType;
+      const acresMatch = !minAcres || listing.acres >= Number(minAcres);
+      const soilMatch = !minSoilRating || listing.soilRating >= Number(minSoilRating);
+      const priceMatch = !maxPricePerAcre || listing.pricePerAcre <= Number(maxPricePerAcre);
+      const queryMatch =
+        !lc ||
+        listing.title.toLowerCase().includes(lc) ||
+        listing.rm.toLowerCase().includes(lc) ||
+        listing.region.toLowerCase().includes(lc);
+      return statusMatch && regionMatch && typeMatch && acresMatch && soilMatch && priceMatch && queryMatch;
+    });
+    switch (sortKey) {
+      case "ppa-asc":
+        return [...filtered].sort((a, b) => a.pricePerAcre - b.pricePerAcre);
+      case "ppa-desc":
+        return [...filtered].sort((a, b) => b.pricePerAcre - a.pricePerAcre);
+      case "acres-desc":
+        return [...filtered].sort((a, b) => b.acres - a.acres);
+      case "soil-desc":
+        return [...filtered].sort((a, b) => b.soilRating - a.soilRating);
+      default:
+        return filtered;
+    }
+  }, [
+    backendListings,
+    status,
+    region,
+    propertyType,
+    minAcres,
+    minSoilRating,
+    maxPricePerAcre,
+    searchQuery,
+    sortKey
+  ]);
+
+  const hasActiveFilters =
+    !status.includes("All") ||
+    region !== "All" ||
+    propertyType !== "All" ||
+    Boolean(minAcres) ||
+    Boolean(minSoilRating) ||
+    Boolean(maxPricePerAcre) ||
+    Boolean(searchQuery.trim()) ||
+    sortKey !== "newest";
+
+  function resetFilters() {
+    setStatus(["All"]);
+    setRegion("All");
+    setPropertyType("All");
+    setMinAcres("");
+    setMinSoilRating("");
+    setMaxPricePerAcre("");
+    setSearchQuery("");
+    setSortKey("newest");
+  }
 
   const regionOptions = useMemo(
     () => ["All", ...Array.from(new Set(backendListings.map((listing) => listing.region))).sort()],
@@ -1378,6 +1493,16 @@ export function FarmAuctionApp() {
                 </button>
               ))}
             </div>
+            <label className="search-pill">
+              <span>Search</span>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Title, RM, region…"
+                aria-label="Search listings"
+              />
+            </label>
             <label className="select-pill">
               <span>Region</span>
               <select value={region} onChange={(event) => setRegion(event.target.value)}>
@@ -1418,12 +1543,30 @@ export function FarmAuctionApp() {
                 onChange={(event) => setMaxPricePerAcre(event.target.value)}
               />
             </label>
+            <label className="select-pill">
+              <span>Sort</span>
+              <select
+                value={sortKey}
+                onChange={(event) => setSortKey(event.target.value as SortKey)}
+              >
+                {SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <div className="right">
             Showing&nbsp;
             <strong>
               {filteredListings.length} of {backendListings.length}
             </strong>
+            {hasActiveFilters ? (
+              <button type="button" className="reset-link" onClick={resetFilters}>
+                Reset
+              </button>
+            ) : null}
           </div>
         </div>
 

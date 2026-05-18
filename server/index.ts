@@ -39,6 +39,14 @@ import { dollarsToCents, serializeAuction, serializeListing } from "./serializer
 const listingStatusSchema = z.enum(["For Sale", "Pending", "Sold", "Wanted", "Lease"]);
 const propertyTypeSchema = z.enum(["Grain", "Mixed", "Pasture", "Lease"]);
 
+const listingSortSchema = z.enum([
+  "newest",
+  "ppa-asc",
+  "ppa-desc",
+  "acres-desc",
+  "soil-desc"
+]);
+
 const listingQuerySchema = z.object({
   status: listingStatusSchema.or(z.literal("All")).optional(),
   region: z.string().optional(),
@@ -46,7 +54,9 @@ const listingQuerySchema = z.object({
   minAcres: z.coerce.number().positive().optional(),
   maxAcres: z.coerce.number().positive().optional(),
   minSoilRating: z.coerce.number().int().min(0).max(100).optional(),
-  maxPricePerAcre: z.coerce.number().positive().optional()
+  maxPricePerAcre: z.coerce.number().positive().optional(),
+  q: z.string().trim().min(1).max(120).optional(),
+  sort: listingSortSchema.optional()
 });
 
 const bidBodySchema = z
@@ -114,6 +124,18 @@ const adminListingBodySchema = z.object({
     )
     .max(20)
     .default([]),
+  waterSource: z.string().max(500).default(""),
+  currentOperator: z.string().max(500).default(""),
+  lastSalePrice: z.coerce.number().nonnegative().optional(),
+  lastSaleDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD")
+    .optional()
+    .or(z.literal("")),
+  zoning: z.string().max(500).default(""),
+  mineralRights: z.string().max(500).default(""),
+  encumbrances: z.string().max(2000).default(""),
+  seoDescription: z.string().max(320).default(""),
   publish: z.coerce.boolean().default(false)
 });
 
@@ -157,6 +179,14 @@ function assertSameOriginIfBrowserPost(request: FastifyRequest) {
   }
 }
 
+const sortClauses: Record<z.infer<typeof listingSortSchema>, string> = {
+  newest: "l.published_at DESC NULLS LAST, l.updated_at DESC",
+  "ppa-asc": "l.price_per_acre_cents ASC NULLS LAST, l.updated_at DESC",
+  "ppa-desc": "l.price_per_acre_cents DESC NULLS LAST, l.updated_at DESC",
+  "acres-desc": "l.acres DESC NULLS LAST, l.updated_at DESC",
+  "soil-desc": "l.soil_final_rating DESC NULLS LAST, l.updated_at DESC"
+};
+
 function buildListingWhere(rawQuery: unknown) {
   const filters = listingQuerySchema.parse(rawQuery);
   const conditions = ["l.published_at IS NOT NULL"];
@@ -177,9 +207,18 @@ function buildListingWhere(rawQuery: unknown) {
     add("l.price_per_acre_cents <= ?", dollarsToCents(filters.maxPricePerAcre));
   }
 
+  if (filters.q) {
+    values.push(`%${filters.q}%`);
+    const idx = `$${values.length}`;
+    conditions.push(`(l.title ILIKE ${idx} OR l.rm ILIKE ${idx} OR l.region ILIKE ${idx})`);
+  }
+
+  const orderBy = filters.sort ? sortClauses[filters.sort] : "l.updated_at DESC";
+
   return {
     sql: conditions.join(" AND "),
-    values
+    values,
+    orderBy
   };
 }
 
@@ -566,7 +605,7 @@ async function registerRoutes(app: FastifyInstance) {
         LEFT JOIN listing_highlights lh ON lh.listing_id = l.id
         WHERE ${where.sql}
         GROUP BY l.id
-        ORDER BY l.updated_at DESC
+        ORDER BY ${where.orderBy}
       `,
       where.values
     );
@@ -979,12 +1018,15 @@ async function registerRoutes(app: FastifyInstance) {
             slug, title, rm, region, acres, price_per_acre_cents,
             avg_assessment_per_quarter_cents, soil_final_rating, property_type,
             status, latitude, longitude, hero_image_url, satellite_image_url,
-            description, published_at
+            description, water_source, current_operator, last_sale_price_cents,
+            last_sale_date, zoning, mineral_rights, encumbrances, seo_description,
+            published_at
           )
           VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9,
-            $10, $11, $12, $13, $14, $15,
-            CASE WHEN $16 THEN now() ELSE NULL END
+            $10, $11, $12, $13, $14, $15, $16, $17, $18,
+            $19, $20, $21, $22, $23,
+            CASE WHEN $24 THEN now() ELSE NULL END
           )
           RETURNING *
         `,
@@ -1004,6 +1046,14 @@ async function registerRoutes(app: FastifyInstance) {
           body.image,
           body.satellite,
           body.description,
+          body.waterSource,
+          body.currentOperator,
+          body.lastSalePrice == null ? null : dollarsToCents(body.lastSalePrice),
+          body.lastSaleDate ? body.lastSaleDate : null,
+          body.zoning,
+          body.mineralRights,
+          body.encumbrances,
+          body.seoDescription,
           body.publish
         ]
       );
@@ -1064,6 +1114,22 @@ async function registerRoutes(app: FastifyInstance) {
         image: body.image ?? existing.rows[0].hero_image_url,
         satellite: body.satellite ?? existing.rows[0].satellite_image_url,
         description: body.description ?? existing.rows[0].description,
+        waterSource: body.waterSource ?? existing.rows[0].water_source ?? "",
+        currentOperator: body.currentOperator ?? existing.rows[0].current_operator ?? "",
+        lastSalePriceCents:
+          body.lastSalePrice == null
+            ? existing.rows[0].last_sale_price_cents
+            : dollarsToCents(body.lastSalePrice),
+        lastSaleDate:
+          body.lastSaleDate === undefined
+            ? existing.rows[0].last_sale_date
+            : body.lastSaleDate
+              ? body.lastSaleDate
+              : null,
+        zoning: body.zoning ?? existing.rows[0].zoning ?? "",
+        mineralRights: body.mineralRights ?? existing.rows[0].mineral_rights ?? "",
+        encumbrances: body.encumbrances ?? existing.rows[0].encumbrances ?? "",
+        seoDescription: body.seoDescription ?? existing.rows[0].seo_description ?? "",
         publishedAt:
           body.publish == null
             ? existing.rows[0].published_at
@@ -1091,9 +1157,17 @@ async function registerRoutes(app: FastifyInstance) {
             hero_image_url = $13,
             satellite_image_url = $14,
             description = $15,
-            published_at = $16,
+            water_source = $16,
+            current_operator = $17,
+            last_sale_price_cents = $18,
+            last_sale_date = $19,
+            zoning = $20,
+            mineral_rights = $21,
+            encumbrances = $22,
+            seo_description = $23,
+            published_at = $24,
             updated_at = now()
-          WHERE id = $17
+          WHERE id = $25
         `,
         [
           next.slug,
@@ -1111,6 +1185,14 @@ async function registerRoutes(app: FastifyInstance) {
           next.image,
           next.satellite,
           next.description,
+          next.waterSource,
+          next.currentOperator,
+          next.lastSalePriceCents,
+          next.lastSaleDate,
+          next.zoning,
+          next.mineralRights,
+          next.encumbrances,
+          next.seoDescription,
           next.publishedAt,
           params.id
         ]

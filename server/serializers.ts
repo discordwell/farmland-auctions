@@ -37,6 +37,15 @@ export function serializeListing(row: QueryResultRow) {
     description: row.description as string,
     highlights: (row.highlights ?? []) as string[],
     photos: (row.photos ?? []) as Array<{ url: string; caption?: string }>,
+    waterSource: (row.water_source ?? "") as string,
+    currentOperator: (row.current_operator ?? "") as string,
+    lastSalePrice:
+      row.last_sale_price_cents == null ? null : centsToDollars(row.last_sale_price_cents),
+    lastSaleDate: (row.last_sale_date as string | null) ?? null,
+    zoning: (row.zoning ?? "") as string,
+    mineralRights: (row.mineral_rights ?? "") as string,
+    encumbrances: (row.encumbrances ?? "") as string,
+    seoDescription: (row.seo_description ?? "") as string,
     publishedAt: row.published_at as string | null,
     updatedAt: row.updated_at as string
   };

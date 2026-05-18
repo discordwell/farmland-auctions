@@ -129,7 +129,7 @@ export function LeafletMap({ listings, lotNumberFor }: LeafletMapProps) {
             <span class="meta">${p.rm} · ${p.acres.toLocaleString()} ac · ${p.status}</span>
             ${
               p.slug
-                ? `<a href="/listings/?slug=${encodeURIComponent(p.slug)}">View file →</a>`
+                ? `<a href="/listings/${encodeURIComponent(p.slug)}/">View lot →</a>`
                 : ""
             }
           </div>`

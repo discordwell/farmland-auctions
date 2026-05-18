@@ -21,17 +21,24 @@ function statusSlug(status: string) {
   return status.toLowerCase().replaceAll(" ", "-");
 }
 
-export function ListingDetail() {
-  const [listing, setListing] = useState<Listing | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+type ListingDetailProps = {
+  initial?: Listing | null;
+  slug?: string;
+};
+
+export function ListingDetail({ initial = null, slug: slugProp }: ListingDetailProps = {}) {
+  const [listing, setListing] = useState<Listing | null>(initial);
+  const [isLoading, setIsLoading] = useState(!initial);
   const [error, setError] = useState("");
   const [activePhoto, setActivePhoto] = useState(0);
   const [inquiryStatus, setInquiryStatus] = useState("");
   const [inquiryError, setInquiryError] = useState("");
 
   useEffect(() => {
+    // If we hydrated from generateStaticParams, refresh in the background to pick up admin edits.
+    // If we didn't (legacy /listings/?slug=... entrypoint), fetch outright.
     const params = new URLSearchParams(window.location.search);
-    const next = params.get("slug") ?? "";
+    const next = slugProp || params.get("slug") || initial?.slug || "";
     if (!next) {
       setIsLoading(false);
       setError("No lot specified");
@@ -39,7 +46,7 @@ export function ListingDetail() {
     }
 
     let cancelled = false;
-    setIsLoading(true);
+    if (!initial) setIsLoading(true);
     fetch(`/api/listings/${encodeURIComponent(next)}`)
       .then(async (response) => {
         if (response.status === 404) throw new Error("Lot not found");
@@ -53,7 +60,7 @@ export function ListingDetail() {
       })
       .catch((err: Error) => {
         if (cancelled) return;
-        setListing(null);
+        if (!initial) setListing(null);
         setError(err.message);
       })
       .finally(() => !cancelled && setIsLoading(false));
@@ -61,7 +68,7 @@ export function ListingDetail() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initial, slugProp]);
 
   async function submitInquiry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -241,6 +248,51 @@ export function ListingDetail() {
             {listing.description ? (
               <p className="detail-description">{listing.description}</p>
             ) : null}
+
+            {(() => {
+              const provenance: Array<[string, string]> = [];
+              if (listing.waterSource) provenance.push(["Water source", listing.waterSource]);
+              if (listing.currentOperator) provenance.push(["Current operator", listing.currentOperator]);
+              if (listing.zoning) provenance.push(["Zoning", listing.zoning]);
+              if (listing.mineralRights) provenance.push(["Mineral rights", listing.mineralRights]);
+              if (listing.lastSalePrice != null && listing.lastSalePrice > 0) {
+                const date = listing.lastSaleDate
+                  ? new Date(listing.lastSaleDate).toLocaleDateString("en-CA", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric"
+                    })
+                  : null;
+                provenance.push([
+                  "Last sale",
+                  date ? `${cad.format(listing.lastSalePrice)} · ${date}` : cad.format(listing.lastSalePrice)
+                ]);
+              }
+              if (!provenance.length && !listing.encumbrances) return null;
+              return (
+                <section className="detail-provenance">
+                  <div className="provenance-head">
+                    <span className="sign">§ Provenance &amp; rights</span>
+                  </div>
+                  {provenance.length ? (
+                    <dl className="provenance-grid">
+                      {provenance.map(([label, value]) => (
+                        <div key={label}>
+                          <dt>{label}</dt>
+                          <dd>{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : null}
+                  {listing.encumbrances ? (
+                    <div className="provenance-note">
+                      <div className="lbl">Encumbrances</div>
+                      <p>{listing.encumbrances}</p>
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })()}
 
             {listing.latitude != null && listing.longitude != null ? (
               <LeafletEmbed

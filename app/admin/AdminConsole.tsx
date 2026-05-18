@@ -250,6 +250,9 @@ export function AdminConsole() {
     const form = event.currentTarget;
     const data = new FormData(form);
 
+    const lastSalePriceRaw = String(data.get("lastSalePrice") ?? "").trim();
+    const lastSaleDateRaw = String(data.get("lastSaleDate") ?? "").trim();
+
     await adminFetch("/api/admin/listings", {
       body: JSON.stringify({
         acres: data.get("acres"),
@@ -277,7 +280,17 @@ export function AdminConsole() {
         soilRating: data.get("soilRating"),
         status: data.get("status"),
         title: data.get("title"),
-        type: data.get("type")
+        type: data.get("type"),
+        latitude: data.get("latitude") || undefined,
+        longitude: data.get("longitude") || undefined,
+        waterSource: data.get("waterSource") ?? "",
+        currentOperator: data.get("currentOperator") ?? "",
+        lastSalePrice: lastSalePriceRaw ? Number(lastSalePriceRaw) : undefined,
+        lastSaleDate: lastSaleDateRaw || undefined,
+        zoning: data.get("zoning") ?? "",
+        mineralRights: data.get("mineralRights") ?? "",
+        encumbrances: data.get("encumbrances") ?? "",
+        seoDescription: data.get("seoDescription") ?? ""
       }),
       method: "POST"
     });
@@ -495,14 +508,14 @@ export function AdminConsole() {
                   Create <em>listing</em>
                 </h2>
               </div>
-              <span className="ornament">Form · 14 fields</span>
+              <span className="ornament">Identity</span>
             </div>
             <form className="admin-form" onSubmit={submitListing}>
               <input name="title" placeholder="Title" required />
               <input name="slug" placeholder="slug" required />
               <input name="rm" placeholder="RM location" required />
               <input name="region" placeholder="Region" required />
-              <input name="acres" placeholder="Title acres" required type="number" />
+              <input name="acres" placeholder="Title acres" required type="number" step="0.1" />
               <input name="pricePerAcre" placeholder="Price per acre" required type="number" />
               <input name="avgAssessment" placeholder="Avg. AV / quarter" required type="number" />
               <input name="soilRating" placeholder="Soil rating" required type="number" />
@@ -519,6 +532,8 @@ export function AdminConsole() {
                 <option>Wanted</option>
                 <option>Lease</option>
               </select>
+              <input name="latitude" placeholder="Latitude (decimal)" type="number" step="0.0001" />
+              <input name="longitude" placeholder="Longitude (decimal, negative for W)" type="number" step="0.0001" />
               <input name="image" defaultValue="/images/hero-fields.jpg" placeholder="Hero image" />
               <input
                 name="satellite"
@@ -531,6 +546,17 @@ export function AdminConsole() {
                 name="photos"
                 placeholder="Additional photo URLs — one per line. Optionally pipe a caption: https://… | Aerial, July"
               />
+
+              <div className="admin-form-divider">Provenance &amp; rights</div>
+              <input name="waterSource" placeholder="Water source — well, dugout, none, etc." />
+              <input name="currentOperator" placeholder="Current operator" />
+              <input name="lastSalePrice" type="number" placeholder="Last sale price (CAD)" />
+              <input name="lastSaleDate" type="date" placeholder="Last sale date" />
+              <input name="zoning" placeholder="Zoning / land use designation" />
+              <input name="mineralRights" placeholder="Mineral rights — included, excluded, partial" />
+              <textarea name="encumbrances" placeholder="Encumbrances, easements, surface leases" />
+              <textarea name="seoDescription" placeholder="SEO description — 1–2 sentences for search engines &amp; social cards (≤ 300 chars)" />
+
               <label className="admin-check">
                 <input name="publish" type="checkbox" />
                 Publish to the book
