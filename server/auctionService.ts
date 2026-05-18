@@ -1,0 +1,305 @@
+import type { PoolClient, QueryResultRow } from "pg";
+import { ApiError } from "./errors.js";
+import { serializeAuction, serializeBid } from "./serializers.js";
+import { query, withTransaction } from "./db/pool.js";
+
+type PlaceBidInput = {
+  auctionId: string;
+  bidderId?: string;
+  bidderEmail?: string;
+  amountCents: number;
+  idempotencyKey: string;
+};
+
+async function getBidderId(client: PoolClient, input: PlaceBidInput) {
+  if (input.bidderId) return input.bidderId;
+
+  const bidder = await client.query<{ id: string }>(
+    "SELECT id FROM bidders WHERE lower(email) = lower($1)",
+    [input.bidderEmail]
+  );
+
+  if (!bidder.rowCount) {
+    throw new ApiError(404, "Bidder is not registered");
+  }
+
+  return bidder.rows[0].id;
+}
+
+async function loadAuctionState(client: PoolClient, auctionId: string) {
+  const auction = await client.query(
+    `
+      SELECT
+        a.*,
+        l.slug AS listing_slug,
+        l.rm AS listing_rm,
+        l.acres AS listing_acres,
+        l.soil_final_rating AS listing_soil_final_rating,
+        l.hero_image_url AS listing_hero_image_url
+      FROM auctions a
+      JOIN listings l ON l.id = a.listing_id
+      WHERE a.id = $1
+    `,
+    [auctionId]
+  );
+
+  if (!auction.rowCount) {
+    throw new ApiError(404, "Auction not found");
+  }
+
+  return serializeAuction(auction.rows[0]);
+}
+
+async function insertRejectedBid(
+  client: PoolClient,
+  input: PlaceBidInput,
+  bidderId: string,
+  auctionVersion: number,
+  reason: string
+) {
+  const bid = await client.query<{ id: string }>(
+    `
+      INSERT INTO bid_events (
+        auction_id, bidder_id, amount_cents, bid_type, idempotency_key,
+        accepted, rejection_reason, auction_version
+      )
+      VALUES ($1, $2, $3, 'live', $4, false, $5, $6)
+      ON CONFLICT (auction_id, idempotency_key) DO NOTHING
+      RETURNING id
+    `,
+    [
+      input.auctionId,
+      bidderId,
+      input.amountCents,
+      input.idempotencyKey,
+      reason,
+      auctionVersion
+    ]
+  );
+
+  return bid.rows[0] ? serializeBid(await loadBid(client, bid.rows[0].id)) : null;
+}
+
+async function loadBid(client: PoolClient, bidId: string) {
+  const bid = await client.query(
+    `
+      SELECT b.*, bidders.legal_name
+      FROM bid_events b
+      JOIN bidders ON bidders.id = b.bidder_id
+      WHERE b.id = $1
+    `,
+    [bidId]
+  );
+
+  if (!bid.rowCount) throw new ApiError(500, "Bid was not persisted");
+  return bid.rows[0];
+}
+
+export async function getBidHistory(auctionId: string, limit = 50) {
+  const result = await query(
+    `
+      SELECT b.*, bidders.legal_name
+      FROM bid_events b
+      JOIN bidders ON bidders.id = b.bidder_id
+      WHERE b.auction_id = $1
+      ORDER BY b.created_at DESC
+      LIMIT $2
+    `,
+    [auctionId, limit]
+  );
+
+  return result.rows.map(serializeBid);
+}
+
+export async function getAuction(auctionId: string) {
+  const auction = await query(
+    `
+      SELECT
+        a.*,
+        l.slug AS listing_slug,
+        l.rm AS listing_rm,
+        l.acres AS listing_acres,
+        l.soil_final_rating AS listing_soil_final_rating,
+        l.hero_image_url AS listing_hero_image_url
+      FROM auctions a
+      JOIN listings l ON l.id = a.listing_id
+      WHERE a.id = $1
+    `,
+    [auctionId]
+  );
+
+  if (!auction.rowCount) throw new ApiError(404, "Auction not found");
+
+  return {
+    auction: serializeAuction(auction.rows[0]),
+    bidHistory: await getBidHistory(auctionId)
+  };
+}
+
+export async function placeBid(input: PlaceBidInput) {
+  return withTransaction(async (client) => {
+    const bidderId = await getBidderId(client, input);
+
+    const lockedAuction = await client.query<QueryResultRow>(
+      "SELECT * FROM auctions WHERE id = $1 FOR UPDATE",
+      [input.auctionId]
+    );
+
+    if (!lockedAuction.rowCount) {
+      throw new ApiError(404, "Auction not found");
+    }
+
+    const auction = lockedAuction.rows[0];
+    const existing = await client.query(
+      `
+        SELECT b.*, bidders.legal_name
+        FROM bid_events b
+        JOIN bidders ON bidders.id = b.bidder_id
+        WHERE b.auction_id = $1 AND b.idempotency_key = $2
+      `,
+      [input.auctionId, input.idempotencyKey]
+    );
+
+    if (existing.rowCount) {
+      return {
+        accepted: Boolean(existing.rows[0].accepted),
+        duplicate: true,
+        bid: serializeBid(existing.rows[0]),
+        auction: await loadAuctionState(client, input.auctionId)
+      };
+    }
+
+    const authorization = await client.query(
+      `
+        SELECT *
+        FROM auction_bidder_authorizations
+        WHERE auction_id = $1 AND bidder_id = $2
+        FOR UPDATE
+      `,
+      [input.auctionId, bidderId]
+    );
+
+    if (!authorization.rowCount || authorization.rows[0].status !== "approved") {
+      throw new ApiError(403, "Bidder is not approved for this auction");
+    }
+
+    const now = Date.now();
+    const opensAt = new Date(auction.opens_at as string).getTime();
+    const closesAt = new Date(auction.closes_at as string).getTime();
+
+    if (auction.status !== "open" || now < opensAt || now > closesAt) {
+      const bid = await insertRejectedBid(
+        client,
+        input,
+        bidderId,
+        Number(auction.version),
+        "Auction is not open"
+      );
+      return {
+        accepted: false,
+        bid,
+        auction: await loadAuctionState(client, input.auctionId),
+        reason: "Auction is not open"
+      };
+    }
+
+    if (auction.auction_type === "sealed") {
+      const bid = await client.query<{ id: string }>(
+        `
+          INSERT INTO bid_events (
+            auction_id, bidder_id, amount_cents, bid_type, idempotency_key,
+            accepted, auction_version
+          )
+          VALUES ($1, $2, $3, 'sealed', $4, true, $5)
+          RETURNING id
+        `,
+        [input.auctionId, bidderId, input.amountCents, input.idempotencyKey, auction.version]
+      );
+
+      await client.query(
+        `
+          INSERT INTO auction_events (auction_id, actor_type, actor_id, event_type, payload)
+          VALUES ($1, 'bidder', $2, 'sealed_bid.accepted', jsonb_build_object('bidId', $3::uuid))
+        `,
+        [input.auctionId, bidderId, bid.rows[0].id]
+      );
+
+      return {
+        accepted: true,
+        sealed: true,
+        bid: serializeBid(await loadBid(client, bid.rows[0].id)),
+        auction: await loadAuctionState(client, input.auctionId)
+      };
+    }
+
+    const currentHigh = Number(auction.current_high_bid_cents);
+    const bidIncrement = Number(auction.bid_increment_cents);
+    const minimumBid = currentHigh > 0 ? currentHigh + bidIncrement : bidIncrement;
+
+    if (input.amountCents < minimumBid) {
+      const bid = await insertRejectedBid(
+        client,
+        input,
+        bidderId,
+        Number(auction.version),
+        `Bid must be at least ${minimumBid} cents`
+      );
+      return {
+        accepted: false,
+        bid,
+        auction: await loadAuctionState(client, input.auctionId),
+        minimumBidCents: minimumBid,
+        reason: `Bid must be at least ${minimumBid} cents`
+      };
+    }
+
+    const nextVersion = Number(auction.version) + 1;
+    const bid = await client.query<{ id: string }>(
+      `
+        INSERT INTO bid_events (
+          auction_id, bidder_id, amount_cents, bid_type, idempotency_key,
+          accepted, auction_version
+        )
+        VALUES ($1, $2, $3, 'live', $4, true, $5)
+        RETURNING id
+      `,
+      [input.auctionId, bidderId, input.amountCents, input.idempotencyKey, nextVersion]
+    );
+
+    await client.query(
+      `
+        UPDATE auctions
+        SET
+          current_high_bid_id = $1,
+          current_high_bid_cents = $2,
+          current_high_bidder_id = $3,
+          version = $4,
+          closes_at = CASE
+            WHEN closes_at - now() <= (soft_close_seconds * interval '1 second')
+            THEN now() + (soft_close_seconds * interval '1 second')
+            ELSE closes_at
+          END,
+          updated_at = now()
+        WHERE id = $5
+      `,
+      [bid.rows[0].id, input.amountCents, bidderId, nextVersion, input.auctionId]
+    );
+
+    await client.query(
+      `
+        INSERT INTO auction_events (auction_id, actor_type, actor_id, event_type, payload)
+        VALUES (
+          $1, 'bidder', $2, 'bid.accepted',
+          jsonb_build_object('bidId', $3::uuid, 'amountCents', $4::bigint, 'auctionVersion', $5::int)
+        )
+      `,
+      [input.auctionId, bidderId, bid.rows[0].id, input.amountCents, nextVersion]
+    );
+
+    return {
+      accepted: true,
+      bid: serializeBid(await loadBid(client, bid.rows[0].id)),
+      auction: await loadAuctionState(client, input.auctionId)
+    };
+  });
+}

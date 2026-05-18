@@ -1,0 +1,10 @@
+node_modules
+.next
+out
+dist-api
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+FARMLAND_AUCTIONS_SPEC.local.md

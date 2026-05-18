@@ -1,0 +1,23 @@
+name: farmauction
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: farmauction-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: farmauction
+      POSTGRES_USER: farmauction
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - farmauction_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U farmauction -d farmauction"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  farmauction_pg:
