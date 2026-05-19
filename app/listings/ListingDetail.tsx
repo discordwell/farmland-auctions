@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import { type Listing } from "../data";
 import { GoogleMapsEmbed } from "../components/GoogleMapsEmbed";
+import { SiteHeader } from "../components/SiteHeader";
+import { useAuth } from "../lib/useAuth";
 
 const cad = new Intl.NumberFormat("en-CA", {
   style: "currency",
@@ -22,6 +24,11 @@ type ListingDetailProps = {
 };
 
 export function ListingDetail({ initial = null, slug: slugProp }: ListingDetailProps = {}) {
+  const { user, status: authStatus, signOut } = useAuth();
+  async function handleSignOut() {
+    await signOut();
+    window.location.assign("/");
+  }
   const [listing, setListing] = useState<Listing | null>(initial);
   const [isLoading, setIsLoading] = useState(!initial);
   const [error, setError] = useState("");
@@ -98,37 +105,27 @@ export function ListingDetail({ initial = null, slug: slugProp }: ListingDetailP
     <main>
       <div className="edition">
         <div className="left">
-          <a href="/">← Wyatt Farmland Auctions</a>
+          <a href="/#inventory">← All listings</a>
         </div>
         <div className="center">
-          <span>{listing ? listing.rm : "Lot detail"}</span>
+          {listing ? (
+            <a href={`/?q=${encodeURIComponent(listing.rm)}#inventory`}>
+              {listing.rm} — see more
+            </a>
+          ) : (
+            <span>Lot detail</span>
+          )}
         </div>
         <div className="right">
-          <a href="/#inventory">All listings</a>
+          {listing?.region ? (
+            <a href={`/?region=${encodeURIComponent(listing.region)}#inventory`}>
+              {listing.region}
+            </a>
+          ) : null}
         </div>
       </div>
 
-      <header className="mast">
-        <div className="mast-inner">
-          <a className="wordmark" href="/" aria-label="Wyatt Farmland Auctions home">
-            <span className="mark">W</span>
-            <span className="lockup">
-              <span className="name">Wyatt</span>
-              <span className="sub">Farmland Auctions</span>
-            </span>
-          </a>
-          <nav className="navlinks" aria-label="Primary">
-            <a href="/#inventory">Lots</a>
-            <a href="/#floor">Auction</a>
-            <a href="/#procurement">Contact</a>
-          </nav>
-          <div className="mast-actions">
-            <a className="btn btn-ghost btn-sm" href="/#inventory">
-              ← Back to lots
-            </a>
-          </div>
-        </div>
-      </header>
+      <SiteHeader user={user} authStatus={authStatus} onSignOut={handleSignOut} />
 
       <section className="band">
         {isLoading ? (

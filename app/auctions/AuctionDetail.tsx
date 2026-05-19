@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 
+import { SiteHeader } from "../components/SiteHeader";
 import { useAuth, type AuthUser } from "../lib/useAuth";
 import type { ApiAuction } from "./AuctionCatalog";
 import { Countdown } from "./Countdown";
@@ -64,7 +65,11 @@ function cleanTitle(raw: string) {
 }
 
 export function AuctionDetail({ id }: { id: string }) {
-  const { user } = useAuth();
+  const { user, status: authStatus, signOut } = useAuth();
+  async function handleSignOut() {
+    await signOut();
+    window.location.assign("/");
+  }
   const [auction, setAuction] = useState<ApiAuction | null>(null);
   const [bids, setBids] = useState<DisplayBid[]>([]);
   const [bidderEmail, setBidderEmail] = useState("");
@@ -136,32 +141,28 @@ export function AuctionDetail({ id }: { id: string }) {
 
   if (isLoading) {
     return (
-      <main className="hub">
-        <header className="hub-bar">
-          <a className="hub-back" href="/">
-            ← Wyatt Farmland Auctions
-          </a>
-        </header>
-        <div className="hub-loading">Loading auction…</div>
-      </main>
+      <>
+        <SiteHeader user={user} authStatus={authStatus} onSignOut={handleSignOut} highlightAuction />
+        <main className="hub">
+          <div className="hub-loading">Loading auction…</div>
+        </main>
+      </>
     );
   }
 
   if (loadError || !auction) {
     return (
-      <main className="hub">
-        <header className="hub-bar">
-          <a className="hub-back" href="/">
-            ← Wyatt Farmland Auctions
-          </a>
-        </header>
-        <div className="hub-empty">
-          <p>{loadError || "Auction not available."}</p>
-          <a className="btn btn-ghost btn-sm" href="/auctions/">
-            See open auctions <span className="arrow">→</span>
-          </a>
-        </div>
-      </main>
+      <>
+        <SiteHeader user={user} authStatus={authStatus} onSignOut={handleSignOut} highlightAuction />
+        <main className="hub">
+          <div className="hub-empty">
+            <p>{loadError || "Auction not available."}</p>
+            <a className="btn btn-ghost btn-sm" href="/auctions/">
+              See open auctions <span className="arrow">→</span>
+            </a>
+          </div>
+        </main>
+      </>
     );
   }
 
@@ -178,19 +179,14 @@ export function AuctionDetail({ id }: { id: string }) {
   });
 
   return (
-    <main className="auction-page">
-      <header className="hub-bar">
-        <a className="hub-back" href="/">
-          ← Wyatt Farmland Auctions
-        </a>
-        <div className="hub-bar-actions">
-          <a className="hub-switch" href="/auctions/">
-            All auctions →
-          </a>
+    <>
+      <SiteHeader user={user} authStatus={authStatus} onSignOut={handleSignOut} highlightAuction />
+      <main className="auction-page">
+        <div className="auction-page-crumb">
+          <a href="/auctions/">All auctions →</a>
         </div>
-      </header>
 
-      <section className="auction-hero">
+        <section className="auction-hero">
         {auction.listing?.image ? (
           <div className="auction-hero-media">
             <img src={auction.listing.image} alt={title} />
@@ -316,8 +312,9 @@ export function AuctionDetail({ id }: { id: string }) {
             onDismiss={() => setShowApply(false)}
           />
         </div>
-      ) : null}
-    </main>
+        ) : null}
+      </main>
+    </>
   );
 }
 

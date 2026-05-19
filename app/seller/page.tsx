@@ -250,9 +250,12 @@ export default function SellerPage() {
 
   if (authStatus === "loading" || (authStatus === "ready" && user === null)) {
     return (
-      <main className="hub">
-        <div className="hub-loading">Loading…</div>
-      </main>
+      <>
+        <SiteHeader user={user} authStatus={authStatus} onSignOut={handleSignOut} />
+        <main className="hub">
+          <div className="hub-loading">Loading…</div>
+        </main>
+      </>
     );
   }
 
@@ -276,18 +279,18 @@ export default function SellerPage() {
       </section>
 
       <div className="hub-stats">
-        <div className="hub-stat">
+        <a className="hub-stat" href="#my-listings">
           <span className="lbl">Listings</span>
           <span className="val">{listings.length}</span>
           <span className="foot">
             {publishedCount} live · {draftCount} draft
           </span>
-        </div>
-        <div className="hub-stat">
+        </a>
+        <a className="hub-stat" href="#my-inquiries">
           <span className="lbl">Inquiries</span>
           <span className="val">{inquiries.length}</span>
           <span className="foot">in the last while</span>
-        </div>
+        </a>
       </div>
 
       <section className="hub-card">
@@ -490,7 +493,7 @@ export default function SellerPage() {
 
       {summaryStatus === "ready" ? (
         <>
-          <section className="hub-card">
+          <section className="hub-card" id="my-listings">
             <header className="hub-card-head">
               <h2>My listings</h2>
               <span className="hub-card-count">
@@ -545,7 +548,7 @@ export default function SellerPage() {
             )}
           </section>
 
-          <section className="hub-card">
+          <section className="hub-card" id="my-inquiries">
             <header className="hub-card-head">
               <h2>My inquiries</h2>
               <span className="hub-card-count">

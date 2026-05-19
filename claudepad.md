@@ -2,6 +2,37 @@
 
 ## Session Summaries
 
+### 2026-05-19 — Wire ~15 dead/decorative elements; SiteHeader on detail pages
+
+Cameron audited the top of `/` and asked "which of these ACTUALLY DO ANYTHING?" — answered, then "do it" + "then check the rest of the site. Same methodology" + "all 5". Five problems and their fixes:
+
+1. **Edition strip + hero byline (already shipped earlier in session).** "North Caron quarter · closes in N min" → `#floor`. "Avg $/ac N" → `#inventory?sort=ppa-asc`. "Acres listed N" → `#inventory`. Hero byline "Cameron Wyatt · Saskatchewan REALTOR®" → `#procurement`. New helper introduced inline; later lifted out.
+
+2. **Footer Sold/Wanted broken.** `<a href="#inventory?status=Sold">` and `…?status=Wanted` — browsers can't resolve a hash with a query string to an element id, so the status filter applied (via the hashchange listener) but no scroll happened. Replaced with `anchorJump` helper calls that update history, dispatch hashchange, AND scroll to the element by id.
+
+3. **`/auctions` catalog + detail used old `hub-bar` instead of SiteHeader.** Lost full nav, user pill, sign out. Replaced both `CatalogView` and `AuctionDetail` (3 hub-bar instances — loading state, error state, main render) with `<SiteHeader user authStatus onSignOut highlightAuction>`. Added small `.auction-page-crumb` ("All auctions →") above the hero on detail view to preserve the cross-link.
+
+4. **Stat tiles dead.**
+   - Home `.stat-rail` 4 cells (Listings/Acres/Auctions/High bid) → anchors to `#inventory`/`#floor`.
+   - `/buyer` `.hub-stat` 4 tiles (Saved/Bids/Registrations/Verification) → anchors to `#watchlist`/`#bids`/`#registrations`/`#buyer-info` (added matching ids to the four `<section className="hub-card">` blocks).
+   - `/seller` `.hub-stat` 2 tiles (Listings/Inquiries) → anchors to `#my-listings`/`#my-inquiries`.
+   - All `<div>` → `<a>`; new CSS rules: `a.cell` and `a.hub-stat` (color inherit, no underline, hover background + ember val).
+
+5. **RM map legend dead.** The 6 legend rows next to the map (For sale/Pending/Sold/Wanted/Lease/Live now) looked clickable, weren't. Converted to anchors using `anchorJump` with the appropriate `status` param; "Live now" → `#floor` since the status-filter equivalent doesn't exist. New `.legend a.item` hover styling.
+
+**Listing detail page (`/listings/[slug]`)** also restructured: replaced custom inline mast (lines 111-131 of `ListingDetail.tsx`) with `<SiteHeader>`. Edition strip rewired:
+- Left: "← All listings" → `/#inventory` (was "← Wyatt Farmland Auctions")
+- Center: `{listing.rm} — see more` → `/?q={rm}#inventory` (was dead text). The URL state reader on home reads `q` from `window.location.search`, applies the search filter, and the hash scrolls — verified the round-trip: clicking the lot's "RM Lipton No. 217 — see more" → landed on home with search input populated and filteredCount=1.
+- Right: `{listing.region}` → `/?region={region}#inventory` (was "All listings").
+
+**Shared helper** `app/lib/anchorJump.ts`. Module-level function (no React state) so RmMap, ListingDetail, and main app can all import. Signature: `anchorJump(event, "#target", params?)`. Calls `preventDefault`, `history.replaceState`, dispatches `HashChangeEvent`, then `window.scrollTo({top: elTop, behavior: 'smooth'})`. Pure imperative scroll instead of `scrollIntoView` because the latter raced with CSS `scroll-behavior: smooth` on `html` and stalled at 0 in Chrome.
+
+**Wet-test artifact noted:** In the Chrome MCP automation harness, requestAnimationFrame is frozen, so smooth scrolls never animate (`scrollY` stays 0). Hash + filter state changes are observable and correct; visual scroll only confirms in a real browser. Don't trust `scrollY` measurements in the harness; trust `location.hash` and observable state instead.
+
+Files: `app/lib/anchorJump.ts` (new), `app/components/FarmAuctionApp.tsx`, `app/auctions/page.tsx`, `app/auctions/AuctionDetail.tsx`, `app/listings/ListingDetail.tsx`, `app/buyer/page.tsx`, `app/seller/page.tsx`, `app/globals.css`. 244 insertions / 132 deletions across 7 files + 1 new file.
+
+Deploy: `npm run build` → `rsync -az --delete out/ ovh2:/opt/farmauction/site/`. Smoke-tested all routes (200). No API surface changed — PM2 untouched.
+
 ### 2026-05-19 — Hero unified to one lot; §03 contact slimmed; agent portrait
 
 Cameron yelled "WHY DO WE STILL HAVE EXTRANEOUS TEXT AND TWO CONTACT FORMS!" and "TELL A UNIFIED STORY GOD DAMN IT". Plus "look at ebay. ebay doesn't have so much extraneous bullshit." Two surgical fixes on the home page (`app/components/FarmAuctionApp.tsx` + `app/globals.css`):

@@ -224,9 +224,12 @@ export default function BuyerPage() {
 
   if (authStatus === "loading" || (authStatus === "ready" && user === null)) {
     return (
-      <main className="hub">
-        <div className="hub-loading">Loading…</div>
-      </main>
+      <>
+        <SiteHeader user={user} authStatus={authStatus} onSignOut={handleSignOut} />
+        <main className="hub">
+          <div className="hub-loading">Loading…</div>
+        </main>
+      </>
     );
   }
 
@@ -249,28 +252,28 @@ export default function BuyerPage() {
         </section>
 
         <div className="hub-stats">
-          <div className="hub-stat">
+          <a className="hub-stat" href="#watchlist">
             <span className="lbl">Saved</span>
             <span className="val">{watchlist.length}</span>
             <span className="foot">{watchlist.length === 1 ? "lot" : "lots"}</span>
-          </div>
-          <div className="hub-stat">
+          </a>
+          <a className="hub-stat" href="#bids">
             <span className="lbl">Bids</span>
             <span className="val">{bids.length}</span>
             <span className="foot">{acceptedBidCount} accepted</span>
-          </div>
-          <div className="hub-stat">
+          </a>
+          <a className="hub-stat" href="#registrations">
             <span className="lbl">Registrations</span>
             <span className="val">{registrations.length}</span>
             <span className="foot">
               {registrations.filter((r) => r.status === "approved").length} approved
             </span>
-          </div>
-          <div className="hub-stat">
+          </a>
+          <a className="hub-stat" href="#buyer-info">
             <span className="lbl">Verification</span>
             <span className="val small">{prettyStatus(verificationStatus)}</span>
             <span className="foot">{bidder?.legal_name || bidder?.email || "Not yet on file"}</span>
-          </div>
+          </a>
         </div>
 
         {summaryStatus === "loading" ? (
@@ -287,7 +290,7 @@ export default function BuyerPage() {
 
         {summaryStatus === "ready" ? (
           <>
-            <section className="hub-card">
+            <section className="hub-card" id="buyer-info">
               <header className="hub-card-head">
                 <h2>Your buyer info</h2>
                 <span className={`lot-status s-${statusSlug(verificationStatus)}`}>
@@ -372,7 +375,7 @@ export default function BuyerPage() {
               </form>
             </section>
 
-            <section className="hub-card">
+            <section className="hub-card" id="watchlist">
               <header className="hub-card-head">
                 <h2>Watchlist</h2>
                 <a className="hub-card-link" href="/#inventory">
@@ -416,7 +419,7 @@ export default function BuyerPage() {
               )}
             </section>
 
-            <section className="hub-card">
+            <section className="hub-card" id="bids">
               <header className="hub-card-head">
                 <h2>Recent bids</h2>
                 <span className="hub-card-count">
@@ -463,7 +466,7 @@ export default function BuyerPage() {
               )}
             </section>
 
-            <section className="hub-card">
+            <section className="hub-card" id="registrations">
               <header className="hub-card-head">
                 <h2>Auction registrations</h2>
                 <span className="hub-card-count">

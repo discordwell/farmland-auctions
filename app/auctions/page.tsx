@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { SiteHeader } from "../components/SiteHeader";
+import { useAuth } from "../lib/useAuth";
 import { AuctionCatalog, type ApiAuction } from "./AuctionCatalog";
 import { AuctionDetail } from "./AuctionDetail";
 
@@ -14,6 +16,7 @@ function readIdParam(): string | null {
 }
 
 function CatalogView() {
+  const { user, status: authStatus, signOut } = useAuth();
   const [auctions, setAuctions] = useState<ApiAuction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -43,32 +46,35 @@ function CatalogView() {
     };
   }, []);
 
+  async function handleSignOut() {
+    await signOut();
+    window.location.assign("/");
+  }
+
   return (
-    <main className="hub">
-      <header className="hub-bar">
-        <a className="hub-back" href="/">
-          ← Wyatt Farmland Auctions
-        </a>
-      </header>
-      <section className="hub-head">
-        <p className="hub-eyebrow">Auctions</p>
-        <h1>
-          Open <em>auctions.</em>
-        </h1>
-        <p className="hub-lede">
-          Reserves published. Bell drops on schedule. Approved bidders only.
-        </p>
-      </section>
-      {loading ? (
-        <div className="hub-loading">Loading auctions…</div>
-      ) : error ? (
-        <div className="hub-empty">
-          <p>{error}</p>
-        </div>
-      ) : (
-        <AuctionCatalog auctions={auctions} variant="page" />
-      )}
-    </main>
+    <>
+      <SiteHeader user={user} authStatus={authStatus} onSignOut={handleSignOut} highlightAuction />
+      <main className="hub">
+        <section className="hub-head">
+          <p className="hub-eyebrow">Auctions</p>
+          <h1>
+            Open <em>auctions.</em>
+          </h1>
+          <p className="hub-lede">
+            Reserves published. Bell drops on schedule. Approved bidders only.
+          </p>
+        </section>
+        {loading ? (
+          <div className="hub-loading">Loading auctions…</div>
+        ) : error ? (
+          <div className="hub-empty">
+            <p>{error}</p>
+          </div>
+        ) : (
+          <AuctionCatalog auctions={auctions} variant="page" />
+        )}
+      </main>
+    </>
   );
 }
 

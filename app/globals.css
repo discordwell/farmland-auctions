@@ -193,6 +193,17 @@ main {
   color: var(--paper);
   font-weight: 600;
 }
+.edition a {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+.edition a:hover,
+.edition a:focus-visible {
+  color: var(--ember-soft);
+  outline: none;
+}
 
 @keyframes livePulse {
   0%,
@@ -455,6 +466,18 @@ main {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--mute);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+.hero-meta a.byline:hover,
+.hero-meta a.byline:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+.hero-meta a.byline:hover .trail,
+.hero-meta a.byline:focus-visible .trail {
+  color: var(--mute);
 }
 .hero-meta .byline strong {
   color: var(--ink);
@@ -667,6 +690,21 @@ main {
   color: var(--moss);
 }
 .stat-rail .foot.live {
+  color: var(--ember);
+}
+.stat-rail a.cell {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.stat-rail a.cell:hover,
+.stat-rail a.cell:focus-visible {
+  background: var(--paper);
+  outline: none;
+}
+.stat-rail a.cell:hover .val,
+.stat-rail a.cell:focus-visible .val {
   color: var(--ember);
 }
 
@@ -1438,6 +1476,19 @@ section.band + section.band {
 }
 .legend .count {
   color: var(--mute-2);
+}
+.legend a.item {
+  text-decoration: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border-radius: 2px;
+  transition: background 120ms ease;
+}
+.legend a.item:hover,
+.legend a.item:focus-visible {
+  background: var(--paper);
+  outline: none;
 }
 
 .map-empty {
@@ -4298,6 +4349,20 @@ footer.colophon {
   font-size: 0.68rem;
   color: var(--mute);
 }
+a.hub-stat {
+  color: inherit;
+  text-decoration: none;
+  transition: background 120ms ease;
+}
+a.hub-stat:hover,
+a.hub-stat:focus-visible {
+  background: var(--paper-soft);
+  outline: none;
+}
+a.hub-stat:hover .val,
+a.hub-stat:focus-visible .val {
+  color: var(--ember);
+}
 
 .hub-card {
   margin: 20px 0;
@@ -4786,6 +4851,21 @@ footer.colophon {
   padding: 0 clamp(18px, 4vw, 48px) 80px;
   background: var(--paper);
   min-height: 100vh;
+}
+.auction-page-crumb {
+  padding: 18px 0 0;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.auction-page-crumb a {
+  color: var(--mute);
+  text-decoration: none;
+}
+.auction-page-crumb a:hover,
+.auction-page-crumb a:focus-visible {
+  color: var(--ink);
 }
 .auction-hero {
   display: grid;

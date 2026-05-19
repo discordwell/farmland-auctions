@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { type Listing, type ListingStatus } from "../data";
 import { useAuth } from "../lib/useAuth";
+import { anchorJump } from "../lib/anchorJump";
 import { AuctionCatalog, type ApiAuction } from "../auctions/AuctionCatalog";
 import { SiteHeader } from "./SiteHeader";
 
@@ -230,36 +231,56 @@ function RmMap({
         )}
       </div>
       <div className="legend">
-        <div className="item">
+        <a
+          className="item"
+          href="#inventory"
+          onClick={(e) => anchorJump(e, "#inventory", { status: "For Sale" })}
+        >
           <span className="swatch"></span>
           <span>For sale</span>
           <span className="count">{counts["For Sale"]}</span>
-        </div>
-        <div className="item s-pending">
+        </a>
+        <a
+          className="item s-pending"
+          href="#inventory"
+          onClick={(e) => anchorJump(e, "#inventory", { status: "Pending" })}
+        >
           <span className="swatch"></span>
           <span>Pending</span>
           <span className="count">{counts.Pending}</span>
-        </div>
-        <div className="item s-sold">
+        </a>
+        <a
+          className="item s-sold"
+          href="#inventory"
+          onClick={(e) => anchorJump(e, "#inventory", { status: "Sold" })}
+        >
           <span className="swatch"></span>
           <span>Sold</span>
           <span className="count">{counts.Sold}</span>
-        </div>
-        <div className="item s-wanted">
+        </a>
+        <a
+          className="item s-wanted"
+          href="#inventory"
+          onClick={(e) => anchorJump(e, "#inventory", { status: "Wanted" })}
+        >
           <span className="swatch"></span>
           <span>Wanted</span>
           <span className="count">{counts.Wanted}</span>
-        </div>
-        <div className="item s-lease">
+        </a>
+        <a
+          className="item s-lease"
+          href="#inventory"
+          onClick={(e) => anchorJump(e, "#inventory", { status: "Lease" })}
+        >
           <span className="swatch"></span>
           <span>Lease</span>
           <span className="count">{counts.Lease}</span>
-        </div>
-        <div className="item s-live">
+        </a>
+        <a className="item s-live" href="#floor" onClick={(e) => anchorJump(e, "#floor")}>
           <span className="swatch"></span>
           <span>Live now</span>
           <span className="count">{counts.Pending > 0 ? 1 : 0}</span>
-        </div>
+        </a>
       </div>
     </aside>
   );
@@ -729,23 +750,23 @@ export function FarmAuctionApp() {
         </div>
         <div className="center">
           {featuredAuction && featuredAuction.status === "open" ? (
-            <span>
+            <a href="#floor" onClick={(e) => anchorJump(e, "#floor")}>
               {cleanAuctionTitle(featuredAuction.title)} · closes in {minsRemaining} min
-            </span>
+            </a>
           ) : (
             <span>Saskatchewan farmland · Wyatt Realty Group</span>
           )}
         </div>
         <div className="right">
           {spotPricePerAcre > 0 ? (
-            <span>
+            <a href="#inventory" onClick={(e) => anchorJump(e, "#inventory", { sort: "ppa-asc" })}>
               Avg $/ac <strong>{number.format(spotPricePerAcre)}</strong>
-            </span>
+            </a>
           ) : null}
           {totalAcres > 0 ? (
-            <span>
+            <a href="#inventory" onClick={(e) => anchorJump(e, "#inventory")}>
               Acres listed <strong>{number.format(Math.round(totalAcres))}</strong>
-            </span>
+            </a>
           ) : null}
         </div>
       </div>
@@ -761,10 +782,10 @@ export function FarmAuctionApp() {
       <section className="hero" id="top">
         <div className="hero-text">
           <div className="hero-meta">
-            <div className="byline">
+            <a className="byline" href="#procurement" onClick={(e) => anchorJump(e, "#procurement")}>
               <strong>Cameron Wyatt</strong>
               <span className="trail">Saskatchewan REALTOR®</span>
-            </div>
+            </a>
           </div>
           <div>
             <h1 className="display">
@@ -820,7 +841,7 @@ export function FarmAuctionApp() {
       </section>
 
       <div className="stat-rail" aria-label="Inventory at a glance">
-        <div className="cell">
+        <a className="cell" href="#inventory" onClick={(e) => anchorJump(e, "#inventory")}>
           <div className="lbl">
             Listings <span className="pip">§</span>
           </div>
@@ -829,8 +850,8 @@ export function FarmAuctionApp() {
             <span className="unit">on book</span>
           </div>
           <div className="foot">{statusCounts["For Sale"] ?? 0} for sale</div>
-        </div>
-        <div className="cell">
+        </a>
+        <a className="cell" href="#inventory" onClick={(e) => anchorJump(e, "#inventory")}>
           <div className="lbl">
             Acres <span className="pip">§</span>
           </div>
@@ -839,8 +860,8 @@ export function FarmAuctionApp() {
             <span className="unit">ac.</span>
           </div>
           <div className="foot">{rmCount} rural municipalities</div>
-        </div>
-        <div className="cell">
+        </a>
+        <a className="cell" href="#floor" onClick={(e) => anchorJump(e, "#floor")}>
           <div className="lbl">
             Auctions <span className="pip">§</span>
           </div>
@@ -855,8 +876,8 @@ export function FarmAuctionApp() {
                 ? `● Soonest closes in ${minsRemaining} min`
                 : ""}
           </div>
-        </div>
-        <div className="cell">
+        </a>
+        <a className="cell" href="#floor" onClick={(e) => anchorJump(e, "#floor")}>
           <div className="lbl">
             High bid <span className="pip">§</span>
           </div>
@@ -866,7 +887,7 @@ export function FarmAuctionApp() {
           <div className={featuredAuction?.reserveMet ? "foot up" : "foot"}>
             {featuredAuction?.reserveMet ? "▲ Reserve met" : "Reserve pending"}
           </div>
-        </div>
+        </a>
       </div>
 
       <section className="band" id="inventory">
@@ -1099,10 +1120,20 @@ export function FarmAuctionApp() {
                 <a href="#floor">Live auction</a>
               </li>
               <li>
-                <a href="#inventory?status=Sold">Sold</a>
+                <a
+                  href="#inventory"
+                  onClick={(e) => anchorJump(e, "#inventory", { status: "Sold" })}
+                >
+                  Sold
+                </a>
               </li>
               <li>
-                <a href="#inventory?status=Wanted">Wanted</a>
+                <a
+                  href="#inventory"
+                  onClick={(e) => anchorJump(e, "#inventory", { status: "Wanted" })}
+                >
+                  Wanted
+                </a>
               </li>
             </ul>
           </div>
