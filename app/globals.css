@@ -2042,13 +2042,41 @@ section.band + section.band {
 }
 
 .agent-card {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 18px;
+  align-items: start;
   border: var(--hair);
   background: var(--paper-soft);
   padding: 18px;
 }
+.agent-portrait {
+  width: 96px;
+  height: 96px;
+  display: grid;
+  place-items: center;
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.agent-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.agent-monogram {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 1.9rem;
+  letter-spacing: 0.04em;
+}
 .agent-meta {
   display: grid;
   gap: 4px;
+  min-width: 0;
 }
 .agent-meta .name {
   font-family: var(--serif);
@@ -2091,43 +2119,14 @@ section.band + section.band {
   color: var(--mute);
 }
 
-.contact-block .pre {
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--mute);
-}
-.contact-block h2 {
-  margin: 8px 0 18px;
-  font-family: var(--serif);
-  font-weight: 500;
-  font-size: clamp(2rem, 4vw, 3.4rem);
-  line-height: 0.98;
-  letter-spacing: -0.018em;
-  color: var(--ink);
-  max-width: 16ch;
-}
-.contact-block h2 em {
-  font-style: italic;
-  color: var(--prairie);
-}
-.contact-block .lede {
-  font-family: var(--serif);
-  font-size: 1.1rem;
-  line-height: 1.55;
-  color: var(--mute);
-  max-width: 48ch;
-}
-
 .contact-form {
-  margin-top: 26px;
-  padding: 22px;
+  margin-top: 0;
+  padding: 18px;
   border: var(--hair);
   background: var(--paper-soft);
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 12px;
 }
 .contact-form .full {
   grid-column: 1 / -1;
@@ -2163,7 +2162,8 @@ section.band + section.band {
   border-color: var(--prairie);
 }
 .contact-form textarea {
-  height: 110px;
+  height: auto;
+  min-height: 72px;
   padding: 10px 12px;
   resize: vertical;
 }
@@ -2207,79 +2207,6 @@ section.band + section.band {
   color: var(--ember);
 }
 .contact-form .form-status.success {
-  color: var(--moss);
-}
-
-.newsletter {
-  margin-top: 32px;
-  border: var(--hair);
-  background: var(--paper);
-  padding: 22px;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 20px;
-  align-items: center;
-}
-.newsletter .copy {
-  font-family: var(--serif);
-  font-size: 1.05rem;
-  line-height: 1.45;
-  color: var(--ink);
-  max-width: 46ch;
-}
-.newsletter .copy strong {
-  display: block;
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--mute);
-  margin-bottom: 6px;
-  font-weight: 600;
-}
-.newsletter form {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: stretch;
-  gap: 0;
-  border: 1px solid var(--rule);
-  border-radius: 2px;
-  overflow: hidden;
-  min-width: 380px;
-}
-.newsletter input {
-  border: 0;
-  outline: 0;
-  padding: 0 14px;
-  height: 46px;
-  background: var(--paper);
-  font-family: var(--mono);
-  font-size: 0.92rem;
-  color: var(--ink);
-}
-.newsletter button {
-  border: 0;
-  background: var(--ink);
-  color: var(--paper);
-  padding: 0 22px;
-  font-family: var(--sans);
-  font-weight: 600;
-  font-size: 0.86rem;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-}
-.newsletter button:hover {
-  background: var(--prairie);
-}
-.newsletter .form-status {
-  grid-column: 1 / -1;
-  margin: 8px 0 0;
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  color: var(--ember);
-}
-.newsletter .form-status.success {
   color: var(--moss);
 }
 
@@ -3566,11 +3493,16 @@ footer.colophon {
   .contact-form {
     grid-template-columns: 1fr;
   }
-  .newsletter {
-    grid-template-columns: 1fr;
+  .agent-card {
+    grid-template-columns: 72px 1fr;
+    gap: 14px;
   }
-  .newsletter form {
-    min-width: 0;
+  .agent-portrait {
+    width: 72px;
+    height: 72px;
+  }
+  .agent-monogram {
+    font-size: 1.4rem;
   }
   .colo-grid {
     grid-template-columns: 1fr;

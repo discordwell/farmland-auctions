@@ -2,6 +2,18 @@
 
 ## Session Summaries
 
+### 2026-05-19 — Hero unified to one lot; §03 contact slimmed; agent portrait
+
+Cameron yelled "WHY DO WE STILL HAVE EXTRANEOUS TEXT AND TWO CONTACT FORMS!" and "TELL A UNIFIED STORY GOD DAMN IT". Plus "look at ebay. ebay doesn't have so much extraneous bullshit." Two surgical fixes on the home page (`app/components/FarmAuctionApp.tsx` + `app/globals.css`):
+
+- **Hero card.** Was mixing `featuredAuction` (DEMO · Lipton half-section) with `featuredListing` (first For-Sale, could be a different lot). Hardcoded title "Open ledger.", acres from `totalAcres` (sum across all 11 listings), generic `/images/lots/hero.png`. Pulled everything onto the auctioned lot via `featuredAuction.listing` (already nested on `ApiAuction`): image from `listing.image`, kicker `Auction · {listing.rm}`, title from `cleanAuctionTitle(auction.title)` (split-italics), Acres from `listing.acres`, replaced the Reserve/HighBid row with `Current bid` + `Closes In Nm`/`At HH:MM CST`. Coherent with the edition strip and the catalog. New `HeroCaption` helper component lives at FarmAuctionApp.tsx:255.
+- **§03 Contact (`#procurement`).** Was: section head `Reach Cameron.` + lede, then a *second* h2 `Tell us what you have, or what you want.` + a *second* lede above the form, then a 6-field form, then a standalone `.newsletter` mini-form whose work was already done by the contact form's `consentNewsletter` checkbox (verified the `/api/contact-inquiries` handler fans out to `newsletter_signups` at server/index.ts ~ line 976). Cut both duplicate intros, cut the RM-hint field (folds into Details), dropped the standalone newsletter block + its handler/state, made textarea `rows={3}` with `min-height: 72px`, tightened form padding 22 → 18. Sole intro is now `§03 · Reach Cameron.` and the form sits to the right of a slim agent card.
+- **Agent portrait.** Added a 96px square slot to the left of `.agent-meta`. Ships with a CW monogram (italic serif on `var(--ink)` — same look as the wordmark mark) because LinkedIn is auth-walled and I couldn't grab a public photo. New `.agent-portrait` + `.agent-monogram` rules in globals.css; mobile shrinks to 72px. To swap in a real headshot later: drop a file at `public/images/cameron.png` and replace the `<span class="agent-monogram">CW</span>` with an `<img>` (the slot already handles `object-fit: cover`).
+
+Wet-tested locally: hero shows the lipton lot's painterly aerial with kicker "AUCTION · RM LIPTON NO. 217", title "Lipton half-section.", Acres 318, Current bid $800,000, Closes In 41 min — all from the same source. §03 has one h2, one form, agent card with the CW monogram. Submitted the form with `consentNewsletter` checked → confirmed rows in `contact_inquiries` (consent_newsletter=t) and `newsletter_signups`.
+
+Tsx side of this revision was swept into upstream commit 4d0741b ("Seller land upload v2…") via an unrelated parallel commit; only the CSS work landed in the dedicated commit on top. Future archeologists: the hero+§03 JSX changes are in 4d0741b alongside the seller v2 work even though the commit message doesn't mention them.
+
 ### 2026-05-19 — Buyer hub: real navbar, self-service profile, status pill bugfix
 
 Cameron flagged three issues on `/buyer`: should show the full home navbar at top, should let the buyer edit/submit info and see verification status, and the lede "What you're watching, what you've bid on…" was clutter. He also pointed out an "approved" pill was partially blocking the sign-out button.
