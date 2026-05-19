@@ -1120,53 +1120,6 @@ section.band + section.band {
   font-weight: 400;
 }
 
-.lot-soil {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 10px;
-  margin: 14px 18px 0;
-}
-.lot-soil .lbl {
-  font-family: var(--mono);
-  font-size: 0.64rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--mute);
-}
-.lot-soil .bar {
-  position: relative;
-  height: 6px;
-  background: var(--paper-deep);
-  border: var(--hair-soft);
-}
-.lot-soil .bar .fill {
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    90deg,
-    var(--prairie) 0,
-    var(--prairie) 4px,
-    transparent 4px,
-    transparent 7px
-  );
-}
-.lot-soil .bar .fill::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, var(--prairie), var(--moss));
-  mix-blend-mode: multiply;
-  opacity: 0.9;
-}
-.lot-soil .val {
-  font-family: var(--mono);
-  font-size: 0.84rem;
-  font-weight: 600;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
 .lot-foot {
   display: flex;
   align-items: center;
@@ -3215,11 +3168,12 @@ footer.colophon {
 
 .detail-description {
   font-family: var(--serif);
-  font-size: 1.15rem;
-  line-height: 1.55;
+  font-size: 1.1rem;
+  line-height: 1.6;
   color: var(--ink-2);
   max-width: 64ch;
   margin: 0;
+  white-space: pre-wrap;
 }
 
 .detail-provenance {

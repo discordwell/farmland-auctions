@@ -17,6 +17,9 @@ type SellerListing = {
   description: string;
   publishedAt: string | null;
   createdAt: string;
+  auctionRequested: boolean;
+  auctionPreferredWindow: string | null;
+  reservePricePerAcre: number | null;
 };
 
 type SellerInquiry = {
@@ -34,7 +37,9 @@ type SellerSummary = {
   inquiries: SellerInquiry[];
 };
 
-type ListingIntent = "For Sale" | "Lease" | "Wanted";
+type ListingIntent = "For Sale" | "Lease" | "Auction";
+type MineralRights = "included" | "excluded" | "partial" | "unknown";
+type AuctionWindow = "within_two_weeks" | "within_a_month" | "brokers_choice";
 
 const cad = new Intl.NumberFormat("en-CA", {
   style: "currency",
@@ -60,14 +65,40 @@ function statusSlug(value: string | null | undefined) {
 
 function listingStateLabel(listing: SellerListing): string {
   if (listing.publishedAt) return "Published";
+  if (listing.auctionRequested) return "Auction requested · pending Cameron";
   return "Draft · pending review";
 }
 
 const intentOptions: Array<{ value: ListingIntent; label: string; blurb: string }> = [
   { value: "For Sale", label: "Sell", blurb: "Outright sale" },
   { value: "Lease", label: "Lease", blurb: "Rent the land out" },
-  { value: "Wanted", label: "Looking", blurb: "I'm trying to find one" }
+  { value: "Auction", label: "Auction", blurb: "Cameron schedules the bell" }
 ];
+
+const mineralRightsOptions: Array<{ value: MineralRights; label: string }> = [
+  { value: "included", label: "Included with sale" },
+  { value: "excluded", label: "Reserved by seller" },
+  { value: "partial", label: "Partial / split" },
+  { value: "unknown", label: "Not sure" }
+];
+
+const windowOptions: Array<{ value: AuctionWindow; label: string; blurb: string }> = [
+  { value: "within_two_weeks", label: "Within 2 weeks", blurb: "Move quickly" },
+  { value: "within_a_month", label: "Within a month", blurb: "Standard window" },
+  { value: "brokers_choice", label: "Broker's choice", blurb: "Cameron decides" }
+];
+
+function targetPriceLabel(intent: ListingIntent): string {
+  if (intent === "Lease") return "Target $/ac / year (optional)";
+  if (intent === "Auction") return "Proposed reserve $/ac (optional)";
+  return "Target $/acre (optional)";
+}
+
+function targetPricePlaceholder(intent: ListingIntent): string {
+  if (intent === "Lease") return "85";
+  if (intent === "Auction") return "3,200";
+  return "3,500";
+}
 
 export default function SellerPage() {
   const { user, status: authStatus, signOut } = useAuth();
@@ -78,12 +109,17 @@ export default function SellerPage() {
   const [summaryError, setSummaryError] = useState("");
 
   const [title, setTitle] = useState("");
+  const [legalDescription, setLegalDescription] = useState("");
   const [rm, setRm] = useState("");
   const [region, setRegion] = useState("");
   const [acres, setAcres] = useState("");
+  const [soilRating, setSoilRating] = useState("");
+  const [mineralRights, setMineralRights] = useState<MineralRights | "">("");
   const [intent, setIntent] = useState<ListingIntent>("For Sale");
   const [targetPpa, setTargetPpa] = useState("");
+  const [auctionWindow, setAuctionWindow] = useState<AuctionWindow>("brokers_choice");
   const [description, setDescription] = useState("");
+  const [photoUrlsText, setPhotoUrlsText] = useState("");
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -146,6 +182,21 @@ export default function SellerPage() {
       return;
     }
 
+    const soilNum = soilRating.trim() ? Number(soilRating) : undefined;
+    if (soilNum != null && (!Number.isFinite(soilNum) || soilNum < 0 || soilNum > 100)) {
+      setFormError("Soil rating should be between 0 and 100.");
+      return;
+    }
+
+    const photoUrls = photoUrlsText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    const ppaNum = targetPpa.trim() ? Number(targetPpa) : undefined;
+    const reserveOnly = intent === "Auction" ? ppaNum : undefined;
+    const standardTarget = intent === "Auction" ? undefined : ppaNum;
+
     setSubmitting(true);
     try {
       const response = await fetch("/api/seller/listings", {
@@ -156,23 +207,38 @@ export default function SellerPage() {
           title: title.trim(),
           rm: rm.trim(),
           region: region.trim(),
+          legalDescription: legalDescription.trim(),
           acres: acresNum,
+          soilRating: soilNum,
+          mineralRights: mineralRights || undefined,
           intent,
-          targetPricePerAcre: targetPpa.trim() ? Number(targetPpa) : undefined,
-          description: description.trim()
+          targetPricePerAcre: standardTarget,
+          auctionPreferredWindow: intent === "Auction" ? auctionWindow : undefined,
+          auctionReservePricePerAcre: reserveOnly,
+          description: description.trim(),
+          photoUrls
         })
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => ({}))) as { message?: string };
         throw new Error(payload.message ?? "Could not submit the listing");
       }
-      setFormSuccess("Submitted. Cameron will review and publish it.");
+      setFormSuccess(
+        intent === "Auction"
+          ? "Submitted. Cameron will schedule the auction."
+          : "Submitted. Cameron will review and publish it."
+      );
       setTitle("");
+      setLegalDescription("");
       setRm("");
       setRegion("");
       setAcres("");
+      setSoilRating("");
+      setMineralRights("");
       setTargetPpa("");
+      setAuctionWindow("brokers_choice");
       setDescription("");
+      setPhotoUrlsText("");
       setIntent("For Sale");
       await loadSummary();
     } catch (err) {
@@ -267,6 +333,17 @@ export default function SellerPage() {
                 required
               />
             </div>
+            <div className="field full">
+              <label htmlFor="seller-lld">Legal land description (optional)</label>
+              <input
+                id="seller-lld"
+                type="text"
+                value={legalDescription}
+                onChange={(event) => setLegalDescription(event.target.value)}
+                placeholder="e.g. SE 14-22-12 W2"
+                maxLength={200}
+              />
+            </div>
             <div className="field">
               <label htmlFor="seller-acres">Acres</label>
               <input
@@ -282,14 +359,43 @@ export default function SellerPage() {
               />
             </div>
             <div className="field">
-              <label htmlFor="seller-ppa">Target $/acre (optional)</label>
+              <label htmlFor="seller-soil">Soil rating (optional)</label>
+              <input
+                id="seller-soil"
+                type="number"
+                inputMode="numeric"
+                value={soilRating}
+                onChange={(event) => setSoilRating(event.target.value)}
+                placeholder="0–100"
+                min={0}
+                max={100}
+                step={1}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="seller-minerals">Mineral rights (optional)</label>
+              <select
+                id="seller-minerals"
+                value={mineralRights}
+                onChange={(event) => setMineralRights(event.target.value as MineralRights | "")}
+              >
+                <option value="">Not specified</option>
+                {mineralRightsOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="seller-ppa">{targetPriceLabel(intent)}</label>
               <input
                 id="seller-ppa"
                 type="number"
                 inputMode="decimal"
                 value={targetPpa}
                 onChange={(event) => setTargetPpa(event.target.value)}
-                placeholder="3,200"
+                placeholder={targetPricePlaceholder(intent)}
                 min={0}
               />
             </div>
@@ -311,16 +417,49 @@ export default function SellerPage() {
                 ))}
               </div>
             </div>
+            {intent === "Auction" ? (
+              <div className="field full">
+                <span className="label-text">Preferred auction window</span>
+                <div className="intent-pills" role="radiogroup" aria-label="Preferred auction window">
+                  {windowOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={auctionWindow === option.value}
+                      className={`intent-pill${auctionWindow === option.value ? " on" : ""}`}
+                      onClick={() => setAuctionWindow(option.value)}
+                    >
+                      <span className="intent-pill-label">{option.label}</span>
+                      <span className="intent-pill-blurb">{option.blurb}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div className="field full">
-              <label htmlFor="seller-desc">Details</label>
+              <label htmlFor="seller-desc">Description</label>
               <textarea
                 id="seller-desc"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                placeholder="Soil rating, water source, current operator, timing, anything else worth knowing."
-                rows={4}
+                placeholder={`Tell buyers about the land. A few paragraphs is fine.\n\nThink about: drainage, frontage, fences, outbuildings, neighbours, timing constraints, the history of the field.`}
+                rows={8}
                 maxLength={4000}
               />
+            </div>
+            <div className="field full">
+              <label htmlFor="seller-photos">Photo URLs (optional)</label>
+              <textarea
+                id="seller-photos"
+                value={photoUrlsText}
+                onChange={(event) => setPhotoUrlsText(event.target.value)}
+                placeholder={`https://...\nhttps://...`}
+                rows={3}
+              />
+              <span className="hub-row-meta light">
+                One URL per line. Cameron may add pro shots later.
+              </span>
             </div>
           </div>
           <div className="seller-form-foot">
@@ -386,7 +525,13 @@ export default function SellerPage() {
                           : ""}
                       </span>
                     </div>
-                    <span className={`lot-status s-${statusSlug(listing.status)}`}>
+                    <span
+                      className={`lot-status s-${
+                        listing.auctionRequested
+                          ? "pending"
+                          : statusSlug(listing.status)
+                      }`}
+                    >
                       <span className="swatch" />
                       {listingStateLabel(listing)}
                     </span>

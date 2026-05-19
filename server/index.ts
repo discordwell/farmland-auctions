@@ -112,10 +112,24 @@ const sellerListingBodySchema = z.object({
   title: z.string().min(3).max(160),
   rm: z.string().min(2).max(120),
   region: z.string().min(2).max(120),
+  legalDescription: z.string().trim().max(200).default(""),
   acres: z.coerce.number().positive().max(100000),
-  intent: z.enum(["For Sale", "Lease", "Wanted"]).default("For Sale"),
+  soilRating: z.coerce.number().int().min(0).max(100).optional(),
+  mineralRights: z
+    .enum(["included", "excluded", "partial", "unknown"])
+    .optional(),
+  intent: z.enum(["For Sale", "Lease", "Auction"]).default("For Sale"),
   targetPricePerAcre: z.coerce.number().nonnegative().max(1_000_000).optional(),
-  description: z.string().max(4000).default("")
+  auctionPreferredWindow: z
+    .enum(["within_two_weeks", "within_a_month", "brokers_choice"])
+    .optional(),
+  auctionReservePricePerAcre: z.coerce
+    .number()
+    .nonnegative()
+    .max(1_000_000)
+    .optional(),
+  description: z.string().max(4000).default(""),
+  photoUrls: z.array(z.string().url().max(2000)).max(20).default([])
 });
 
 const adminListingBodySchema = z.object({
@@ -1018,7 +1032,8 @@ async function registerRoutes(app: FastifyInstance) {
         SELECT
           l.id, l.slug, l.title, l.rm, l.region, l.acres,
           l.price_per_acre_cents, l.status, l.published_at, l.created_at,
-          l.description
+          l.description, l.auction_requested, l.auction_preferred_window,
+          l.reserve_price_per_acre_cents
         FROM listings l
         WHERE l.seller_user_id = $1
         ORDER BY l.created_at DESC
@@ -1058,7 +1073,12 @@ async function registerRoutes(app: FastifyInstance) {
         status: row.status,
         description: row.description ?? "",
         publishedAt: row.published_at,
-        createdAt: row.created_at
+        createdAt: row.created_at,
+        auctionRequested: Boolean(row.auction_requested),
+        auctionPreferredWindow: row.auction_preferred_window ?? null,
+        reservePricePerAcre: row.reserve_price_per_acre_cents
+          ? Number(row.reserve_price_per_acre_cents) / 100
+          : null
       })),
       inquiries: inquiriesResult.rows.map((row) => ({
         id: row.id,
@@ -1083,58 +1103,104 @@ async function registerRoutes(app: FastifyInstance) {
       .slice(0, 60) || "listing";
     const slug = `${slugBase}-${randomUUID().slice(0, 8)}`;
 
-    const result = await query<{ id: string; slug: string }>(
-      `
-        INSERT INTO listings (
-          slug, title, rm, region, acres,
-          price_per_acre_cents, avg_assessment_per_quarter_cents, soil_final_rating,
-          status, hero_image_url, satellite_image_url, description,
-          seller_user_id
-        )
-        VALUES (
-          $1, $2, $3, $4, $5,
-          $6, 0, 0,
-          $7, '', '', $8,
-          $9
-        )
-        RETURNING id, slug
-      `,
-      [
-        slug,
-        body.title,
-        body.rm,
-        body.region,
-        body.acres,
-        body.targetPricePerAcre ? dollarsToCents(body.targetPricePerAcre) : 0,
-        body.intent,
-        body.description,
-        user.id
-      ]
-    );
+    const isAuction = body.intent === "Auction";
+    // Auction requests are stored as "For Sale" listings flagged for Cameron to schedule.
+    const listingStatus = isAuction ? "For Sale" : body.intent;
+    const reserveCents =
+      isAuction && body.auctionReservePricePerAcre
+        ? dollarsToCents(body.auctionReservePricePerAcre)
+        : null;
+    const photoUrls = body.photoUrls.filter((url) => url.trim().length > 0);
+
+    const result = await withTransaction(async (client) => {
+      const inserted = await client.query<{ id: string; slug: string }>(
+        `
+          INSERT INTO listings (
+            slug, title, rm, region, legal_description, acres,
+            price_per_acre_cents, avg_assessment_per_quarter_cents, soil_final_rating,
+            status, hero_image_url, satellite_image_url, description,
+            mineral_rights_status, auction_requested, auction_preferred_window,
+            reserve_price_per_acre_cents, seller_user_id
+          )
+          VALUES (
+            $1, $2, $3, $4, $5, $6,
+            $7, 0, $8,
+            $9, '', '', $10,
+            $11, $12, $13,
+            $14, $15
+          )
+          RETURNING id, slug
+        `,
+        [
+          slug,
+          body.title,
+          body.rm,
+          body.region,
+          body.legalDescription,
+          body.acres,
+          body.targetPricePerAcre ? dollarsToCents(body.targetPricePerAcre) : 0,
+          body.soilRating ?? 0,
+          listingStatus,
+          body.description,
+          body.mineralRights ?? null,
+          isAuction,
+          isAuction ? body.auctionPreferredWindow ?? "brokers_choice" : null,
+          reserveCents,
+          user.id
+        ]
+      );
+
+      const newListing = inserted.rows[0];
+
+      for (const [index, url] of photoUrls.entries()) {
+        await client.query(
+          `INSERT INTO listing_photos (listing_id, url, caption, position)
+           VALUES ($1, $2, '', $3)`,
+          [newListing.id, url, index + 1]
+        );
+      }
+
+      return newListing;
+    });
 
     if (config.opsNotifyEmail) {
+      const lines: string[] = [
+        `Seller: ${user.displayName || user.email} (${user.email})`,
+        `Title: ${body.title}`,
+        `RM: ${body.rm} · Region: ${body.region}`,
+        `Acres: ${body.acres}`,
+        `Intent: ${body.intent}`
+      ];
+      if (body.legalDescription) lines.push(`Legal: ${body.legalDescription}`);
+      if (body.soilRating != null) lines.push(`Soil rating: ${body.soilRating}`);
+      if (body.mineralRights) lines.push(`Mineral rights: ${body.mineralRights}`);
+      if (body.targetPricePerAcre) {
+        lines.push(`Target $/ac: ${body.targetPricePerAcre}`);
+      }
+      if (isAuction) {
+        lines.push(
+          `Auction reserve $/ac: ${body.auctionReservePricePerAcre ?? "not specified"}`
+        );
+        lines.push(
+          `Preferred window: ${body.auctionPreferredWindow ?? "brokers_choice"}`
+        );
+      }
+      if (photoUrls.length) lines.push(`Photos: ${photoUrls.length} uploaded`);
+      lines.push("", body.description || "No description provided.");
+
       await enqueueNotification({
-        body: [
-          `Seller: ${user.displayName || user.email} (${user.email})`,
-          `Title: ${body.title}`,
-          `RM: ${body.rm} · Region: ${body.region}`,
-          `Acres: ${body.acres}`,
-          `Intent: ${body.intent}`,
-          body.targetPricePerAcre
-            ? `Target $/ac: ${body.targetPricePerAcre}`
-            : "Target $/ac: not specified",
-          "",
-          body.description || "No description provided."
-        ].join("\n"),
+        body: lines.join("\n"),
         eventType: "seller.listing.created",
-        metadata: { listingId: result.rows[0].id },
+        metadata: { listingId: result.id, auctionRequested: isAuction },
         recipientEmail: config.opsNotifyEmail,
-        subject: `New seller draft: ${body.title}`
+        subject: isAuction
+          ? `Auction requested: ${body.title}`
+          : `New seller draft: ${body.title}`
       });
     }
 
     reply.status(201);
-    return { listing: result.rows[0] };
+    return { listing: result };
   });
 
   app.post("/api/newsletter-signups", async (request, reply) => {

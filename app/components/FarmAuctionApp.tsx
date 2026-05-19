@@ -72,24 +72,6 @@ function formatLotNumber(index: number) {
   return String(index + 1).padStart(3, "0");
 }
 
-function primaryLandUse(listing: Listing): string {
-  const total = Math.max(1, listing.acres);
-  const buckets: Array<[string, number]> = [
-    ["Cultivated", listing.acresCultivated ?? 0],
-    ["Pasture", listing.acresPasture ?? 0],
-    ["Hayland", listing.acresHayland ?? 0],
-    ["Bush", listing.acresBush ?? 0],
-    ["Yard", listing.acresYard ?? 0]
-  ];
-  buckets.sort((a, b) => b[1] - a[1]);
-  const [topLabel, topAcres] = buckets[0];
-  if (topAcres <= 0) return listing.status === "Wanted" ? "Seeking" : "Mixed use";
-  const pct = Math.round((topAcres / total) * 100);
-  if (pct >= 90) return topLabel;
-  if (pct >= 60) return `Mostly ${topLabel.toLowerCase()}`;
-  return "Mixed use";
-}
-
 function CompassRose() {
   return (
     <svg className="compass" viewBox="0 0 60 60" fill="none" stroke="currentColor" strokeWidth="1">
@@ -126,7 +108,6 @@ function LotCard({
 }) {
   const lotNo = formatLotNumber(lotIndex);
   const statusKey = statusSlug(listing.status);
-  const soilGap = Math.max(0, Math.min(100, 100 - listing.soilRating));
   const isWanted = listing.status === "Wanted";
 
   return (
@@ -177,13 +158,6 @@ function LotCard({
           <dd>{listing.soilRating}</dd>
         </div>
       </dl>
-      <div className="lot-soil">
-        <span className="lbl">{primaryLandUse(listing)}</span>
-        <div className="bar">
-          <div className="fill" style={{ right: `${soilGap}%` }}></div>
-        </div>
-        <span className="val">{listing.soilRating}</span>
-      </div>
       <div className="lot-foot">
         <span className="type">{listing.region}</span>
         {isWanted ? (
@@ -278,6 +252,92 @@ function RmMap({
   );
 }
 
+function HeroCaption({
+  featuredAuction,
+  featuredListing,
+  highBidCurrent,
+  minsRemaining
+}: {
+  featuredAuction: ApiAuction | null;
+  featuredListing: Listing | null;
+  highBidCurrent: number;
+  minsRemaining: number;
+}) {
+  const lotTitle = featuredAuction
+    ? cleanAuctionTitle(featuredAuction.title)
+    : featuredListing!.title;
+  const lotRm = featuredAuction
+    ? featuredAuction.listing?.rm ?? ""
+    : featuredListing!.rm;
+  const lotAcres = featuredAuction
+    ? featuredAuction.listing?.acres ?? null
+    : featuredListing!.acres;
+  const titleParts = lotTitle.split(" ");
+  const titleHead = titleParts.slice(0, -1).join(" ");
+  const titleTail = titleParts.slice(-1)[0] ?? lotTitle;
+  const closesLabel =
+    featuredAuction && featuredAuction.status === "open"
+      ? minsRemaining < 60
+        ? `In ${Math.max(0, minsRemaining)} min`
+        : `${new Date(featuredAuction.closesAt).toLocaleTimeString("en-CA", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false
+          })} CST`
+      : null;
+
+  return (
+    <div className="caption">
+      <div className="kicker">
+        {featuredAuction
+          ? `Auction · ${lotRm || "live on the floor"}`
+          : `Featured · ${lotRm}`}
+      </div>
+      <div className="title">
+        {titleHead ? `${titleHead} ` : ""}
+        <em>{titleTail}.</em>
+      </div>
+      <div className="rule"></div>
+      <div className="row">
+        <div>
+          <div className="lbl">Acres</div>
+          <div className="val">
+            {lotAcres != null ? number.format(Math.round(lotAcres)) : "—"}
+          </div>
+        </div>
+        {featuredAuction ? (
+          <>
+            <div>
+              <div className="lbl">Current bid</div>
+              <div className="val">
+                {highBidCurrent > 0 ? cad.format(highBidCurrent) : "—"}
+              </div>
+            </div>
+            <div>
+              <div className="lbl">{closesLabel ? "Closes" : "Status"}</div>
+              <div className="val">
+                {closesLabel ??
+                  featuredAuction.status.charAt(0).toUpperCase() + featuredAuction.status.slice(1)}
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <div className="lbl">$/ac</div>
+              <div className="val">{cad.format(featuredListing!.pricePerAcre)}</div>
+            </div>
+            <div>
+              <div className="lbl">Status</div>
+              <div className="val">{featuredListing!.status}</div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function FarmAuctionApp() {
   const { user, status: authStatus, signOut } = useAuth();
 
@@ -299,9 +359,6 @@ export function FarmAuctionApp() {
   const [isAuctionsLoading, setIsAuctionsLoading] = useState(true);
   const [contactStatus, setContactStatus] = useState("");
   const [contactError, setContactError] = useState("");
-  const [newsletterEmail, setNewsletterEmail] = useState("");
-  const [newsletterStatus, setNewsletterStatus] = useState("");
-  const [newsletterError, setNewsletterError] = useState("");
   const [watchedSlugs, setWatchedSlugs] = useState<Set<string>>(new Set());
 
   function readLocalWatchlist(): string[] {
@@ -532,28 +589,6 @@ export function FarmAuctionApp() {
     }
   }
 
-  async function submitNewsletter(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setNewsletterStatus("");
-    setNewsletterError("");
-
-    try {
-      const response = await fetch("/api/newsletter-signups", {
-        body: JSON.stringify({
-          email: newsletterEmail.trim(),
-          source: "website"
-        }),
-        headers: { "content-type": "application/json" },
-        method: "POST"
-      });
-      if (!response.ok) throw new Error("Newsletter signup failed");
-      setNewsletterEmail("");
-      setNewsletterStatus("Subscribed. We'll email when something opens.");
-    } catch {
-      setNewsletterError("Signup is unavailable.");
-    }
-  }
-
   const filteredListings = useMemo(() => {
     const lc = searchQuery.trim().toLowerCase();
     const filtered = backendListings.filter((listing) => {
@@ -746,58 +781,27 @@ export function FarmAuctionApp() {
           </div>
         </div>
         <div className="hero-photo">
-          <img src="/images/lots/hero.png" alt="Saskatchewan farmland at sunset" />
+          <img
+            src={
+              featuredAuction?.listing?.image ||
+              featuredListing?.image ||
+              "/images/lots/hero.png"
+            }
+            alt={
+              featuredAuction
+                ? cleanAuctionTitle(featuredAuction.title)
+                : featuredListing
+                  ? featuredListing.title
+                  : "Saskatchewan farmland at sunset"
+            }
+          />
           {featuredAuction || featuredListing ? (
-            <div className="caption">
-              <div className="kicker">
-                {featuredAuction
-                  ? `Auction · ${cleanAuctionTitle(featuredAuction.title)}`
-                  : `Featured · ${featuredListing!.rm}`}
-              </div>
-              <div className="title">
-                {featuredAuction ? (
-                  <em>Open ledger.</em>
-                ) : (
-                  <>
-                    {featuredListing!.title.split(" ").slice(0, -1).join(" ")}{" "}
-                    <em>{featuredListing!.title.split(" ").slice(-1)[0]}.</em>
-                  </>
-                )}
-              </div>
-              <div className="rule"></div>
-              <div className="row">
-                <div>
-                  <div className="lbl">Acres</div>
-                  <div className="val">
-                    {number.format(
-                      featuredAuction
-                        ? Math.round(totalAcres)
-                        : Math.round(featuredListing!.acres)
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <div className="lbl">{featuredAuction ? "Reserve" : "$/ac"}</div>
-                  <div className="val">
-                    {featuredAuction
-                      ? featuredAuction.reserveMet
-                        ? "Met"
-                        : "Open"
-                      : cad.format(featuredListing!.pricePerAcre)}
-                  </div>
-                </div>
-                <div>
-                  <div className="lbl">{featuredAuction ? "High bid" : "Status"}</div>
-                  <div className="val">
-                    {featuredAuction
-                      ? highBidCurrent > 0
-                        ? cad.format(highBidCurrent)
-                        : "—"
-                      : featuredListing!.status}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <HeroCaption
+              featuredAuction={featuredAuction}
+              featuredListing={featuredListing}
+              highBidCurrent={highBidCurrent}
+              minsRemaining={minsRemaining}
+            />
           ) : null}
         </div>
       </section>
@@ -995,12 +999,13 @@ export function FarmAuctionApp() {
           <h2 className="title">
             Reach <em>Cameron.</em>
           </h2>
-          <p className="lede">
-            Saskatchewan farmland — sale, lease, auction, or a property you&apos;re after.
-          </p>
         </div>
         <div className="procurement">
           <aside className="agent-card">
+            <div className="agent-portrait" aria-hidden="true">
+              {/* Drop a real headshot at /public/images/cameron.png to replace the monogram. */}
+              <span className="agent-monogram">CW</span>
+            </div>
             <div className="agent-meta">
               <span className="name">Cameron Wyatt</span>
               <span className="role">Saskatchewan REALTOR® · Wyatt Realty Group</span>
@@ -1018,25 +1023,18 @@ export function FarmAuctionApp() {
           </aside>
 
           <div className="contact-block">
-            <h2>
-              Tell us what you have, or <em>what you want.</em>
-            </h2>
-            <p className="lede">
-              A quarter to move, a buyer with cash, or a block to find. Send a brief.
-            </p>
-
             <form className="contact-form" onSubmit={submitContact}>
               <div className="field">
                 <label htmlFor="ct-name">Name</label>
                 <input id="ct-name" name="name" autoComplete="name" placeholder="Your full name" required />
               </div>
               <div className="field">
-                <label htmlFor="ct-phone">Phone</label>
-                <input id="ct-phone" name="phone" autoComplete="tel" placeholder="306 555 0119" />
-              </div>
-              <div className="field full">
                 <label htmlFor="ct-email">Email</label>
                 <input id="ct-email" name="email" type="email" autoComplete="email" placeholder="you@operations.ca" required />
+              </div>
+              <div className="field">
+                <label htmlFor="ct-phone">Phone</label>
+                <input id="ct-phone" name="phone" autoComplete="tel" placeholder="306 555 0119" />
               </div>
               <div className="field">
                 <label htmlFor="ct-type">Type</label>
@@ -1047,16 +1045,13 @@ export function FarmAuctionApp() {
                   <option>Wanted</option>
                 </select>
               </div>
-              <div className="field">
-                <label htmlFor="ct-rm">RM or county (if known)</label>
-                <input id="ct-rm" name="rmHint" placeholder="e.g. RM Lipton No. 217" />
-              </div>
               <div className="field full">
                 <label htmlFor="ct-msg">Details</label>
                 <textarea
                   id="ct-msg"
                   name="message"
-                  placeholder="Acres, legal, soil rating, current operator, timing, anything else worth knowing."
+                  rows={3}
+                  placeholder="Acres, RM, soil rating, timing — whatever you've got."
                 />
               </div>
               <label className="check full">
@@ -1064,30 +1059,11 @@ export function FarmAuctionApp() {
                 <span>Notify me when new lots open or an auction is called.</span>
               </label>
               <button className="submit full" type="submit">
-                Send the brief <span className="arrow">→</span>
+                Send <span className="arrow">→</span>
               </button>
               {contactStatus ? <p className="form-status success full">{contactStatus}</p> : null}
               {contactError ? <p className="form-status full">{contactError}</p> : null}
             </form>
-
-            <div className="newsletter">
-              <div className="copy">
-                <strong>Notify me</strong>
-                Get an email when a new lot opens or an auction is called. No schedule, no filler.
-              </div>
-              <form onSubmit={submitNewsletter}>
-                <input
-                  type="email"
-                  placeholder="you@operations.ca"
-                  value={newsletterEmail}
-                  onChange={(event) => setNewsletterEmail(event.target.value)}
-                  required
-                />
-                <button type="submit">Subscribe →</button>
-                {newsletterStatus ? <p className="form-status success">{newsletterStatus}</p> : null}
-                {newsletterError ? <p className="form-status">{newsletterError}</p> : null}
-              </form>
-            </div>
           </div>
         </div>
       </section>
