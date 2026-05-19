@@ -61,7 +61,6 @@ export function AuctionCatalog({
   return (
     <ul className={`auction-catalog ${variant}`}>
       {auctions.map((auction) => {
-        const isOpen = auction.status === "open";
         const isDemo = /^DEMO\s*·/i.test(auction.title);
         const title = cleanTitle(auction.title);
         const high = auction.currentHighBidDollars;
@@ -74,12 +73,6 @@ export function AuctionCatalog({
               <div className="auction-card-media">
                 {auction.listing?.image ? (
                   <img src={auction.listing.image} alt={title} />
-                ) : null}
-                {isOpen ? (
-                  <span className="auction-card-live">
-                    <span className="dot" />
-                    Live
-                  </span>
                 ) : null}
                 {isDemo ? <span className="auction-card-demo">Demo</span> : null}
               </div>

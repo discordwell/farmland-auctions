@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
-import { useAuth } from "../lib/useAuth";
+import { useAuth, type AuthUser } from "../lib/useAuth";
 import type { ApiAuction } from "./AuctionCatalog";
 import { Countdown } from "./Countdown";
 
@@ -70,6 +70,16 @@ export function AuctionDetail({ id }: { id: string }) {
   const [bidderEmail, setBidderEmail] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [showApply, setShowApply] = useState(false);
+  const applyRef = useRef<HTMLDivElement | null>(null);
+
+  function revealApply() {
+    setShowApply(true);
+    // Scroll into view next paint so the user sees the form.
+    setTimeout(() => {
+      applyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }
 
   useEffect(() => {
     if (user?.email && !bidderEmail) {
@@ -161,6 +171,11 @@ export function AuctionDetail({ id }: { id: string }) {
   const currentHigh = Math.max(auction.currentHighBidDollars, bids[0]?.amount ?? 0);
   const increment = auction.bidIncrementCents / 100;
   const minNext = currentHigh + increment;
+  const bellTime = new Date(auction.closesAt).toLocaleTimeString("en-CA", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
 
   return (
     <main className="auction-page">
@@ -179,12 +194,6 @@ export function AuctionDetail({ id }: { id: string }) {
         {auction.listing?.image ? (
           <div className="auction-hero-media">
             <img src={auction.listing.image} alt={title} />
-            {isOpen ? (
-              <span className="auction-hero-live">
-                <span className="dot" />
-                Live
-              </span>
-            ) : null}
             {isDemo ? <span className="auction-hero-demo">Demo · resets every 6h</span> : null}
           </div>
         ) : null}
@@ -195,131 +204,119 @@ export function AuctionDetail({ id }: { id: string }) {
             <em>{title.split(" ").slice(-1)[0]}</em>
           </h1>
           <p className="hero-line">
-            Bell at{" "}
-            {new Date(auction.closesAt).toLocaleTimeString("en-CA", {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false
-            })}{" "}
-            CST · Soft-close {auction.softCloseSeconds}s · Increment {cad.format(increment)}
+            Bell at {bellTime} CST · Increment {cad.format(increment)}
           </p>
           <Countdown closesAt={auction.closesAt} />
         </div>
       </section>
 
-      <div className="auction-floor-grid">
-        <article className="auction" aria-labelledby="auction-h">
-          <header className="auction-top">
-            <div>
-              <span className="live" aria-hidden={!isOpen}>
-                {isOpen ? <span className="dot"></span> : null}
-                {isOpen ? "Live · " : "· "}
-                {auction.status.toUpperCase()} · Bell at{" "}
-                {new Date(auction.closesAt).toLocaleTimeString("en-CA", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  hour12: false
-                })}{" "}
-                CST
-              </span>
-              <h2 id="auction-h">{title}</h2>
-              <div className="legal">
-                Approved bidders only · Soft-close {auction.softCloseSeconds}s
+      <article className="auction" aria-labelledby="auction-h">
+        <header className="auction-top">
+          <div>
+            <span className="live">
+              {auction.status.toUpperCase()} · Bell at {bellTime} CST
+            </span>
+            <h2 id="auction-h">{title}</h2>
+            <div className="legal">Approved bidders only</div>
+          </div>
+        </header>
+
+        <div className="auction-body">
+          <div className="bid-now">
+            <div className="row1">
+              <div>
+                <div className="lbl">Current high bid</div>
+                <div className="price figure">
+                  <span className="cur">CAD</span>
+                  {currentHigh > 0 ? number.format(currentHigh) : "—"}
+                  {currentHigh > 0 && bids.length ? (
+                    <span className="ppa">
+                      bid no. {bids.length} · increment {cad.format(increment)}
+                    </span>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          </header>
-
-          <div className="auction-body">
-            <div className="bid-now">
-              <div className="row1">
-                <div>
-                  <div className="lbl">Current high bid</div>
-                  <div className="price figure">
-                    <span className="cur">CAD</span>
-                    {currentHigh > 0 ? number.format(currentHigh) : "—"}
-                    {currentHigh > 0 && bids.length ? (
-                      <span className="ppa">
-                        bid no. {bids.length} · increment {cad.format(increment)}
-                      </span>
-                    ) : null}
-                  </div>
+              {auction.reserveMet ? (
+                <div className="stamp">
+                  Reserve
+                  <br />
+                  Met
+                  <span className="sub">{EDITION_DATE}</span>
                 </div>
-                {auction.reserveMet ? (
-                  <div className="stamp">
-                    Reserve
-                    <br />
-                    Met
-                    <span className="sub">{EDITION_DATE}</span>
-                  </div>
-                ) : (
-                  <div className="stamp pending">
-                    Reserve
-                    <br />
-                    Pending
-                    <span className="sub">Bell open</span>
-                  </div>
-                )}
-              </div>
-
-              <BidForm
-                auction={auction}
-                bids={bids}
-                bidderEmail={bidderEmail}
-                onBidderEmailChange={setBidderEmail}
-                onBidAccepted={(payload) => {
-                  setAuction(payload.auction);
-                  setBids((current) => {
-                    if (current.some((bid) => bid.id === payload.bid.id)) return current;
-                    return [mapApiBid(payload.bid), ...current].slice(0, 25);
-                  });
-                }}
-              />
-            </div>
-
-            <div className="ledger">
-              <header className="ledger-head">
-                <div className="ttl">
-                  <span className="pip">§</span>&nbsp; Bid ledger · accepted &amp; recorded
-                </div>
-                <div className="count">
-                  {bids.length} {bids.length === 1 ? "bid" : "bids"}
-                </div>
-              </header>
-              {bids.length ? (
-                <ul className="ledger-feed">
-                  {bids.map((bid, idx) => (
-                    <li
-                      className={idx === 0 ? "high" : ""}
-                      key={bid.id ?? `${bid.bidder}-${bid.time}-${idx}`}
-                    >
-                      <span className="car">{idx === 0 ? "▶" : "›"}</span>
-                      <span className="id">BIDDER {bid.bidder.toUpperCase()}</span>
-                      <span className="amt figure">{cad.format(bid.amount)}</span>
-                      <span className="time">{bid.time}</span>
-                    </li>
-                  ))}
-                </ul>
               ) : (
-                <div className="ledger-empty">
-                  <strong>No accepted bids yet</strong>
-                  Bids appear here as they are recorded.
+                <div className="stamp pending">
+                  Reserve
+                  <br />
+                  Pending
+                  <span className="sub">Bell open</span>
                 </div>
               )}
             </div>
+
+            <BidForm
+              auction={auction}
+              bids={bids}
+              bidderEmail={bidderEmail}
+              hideEmailField={Boolean(user)}
+              onBidderEmailChange={setBidderEmail}
+              onBidAccepted={(payload) => {
+                setAuction(payload.auction);
+                setBids((current) => {
+                  if (current.some((bid) => bid.id === payload.bid.id)) return current;
+                  return [mapApiBid(payload.bid), ...current].slice(0, 25);
+                });
+              }}
+              onAuthFailure={revealApply}
+            />
+            <p className="auction-hint">
+              Minimum next bid: <strong>{cad.format(minNext)}</strong>.
+            </p>
           </div>
-        </article>
 
-        <BidderRegistration
-          auction={auction}
-          bidderEmail={bidderEmail}
-          onBidderEmailChange={setBidderEmail}
-        />
-      </div>
+          <div className="ledger">
+            <header className="ledger-head">
+              <div className="ttl">
+                <span className="pip">§</span>&nbsp; Bid ledger · accepted &amp; recorded
+              </div>
+              <div className="count">
+                {bids.length} {bids.length === 1 ? "bid" : "bids"}
+              </div>
+            </header>
+            {bids.length ? (
+              <ul className="ledger-feed">
+                {bids.map((bid, idx) => (
+                  <li
+                    className={idx === 0 ? "high" : ""}
+                    key={bid.id ?? `${bid.bidder}-${bid.time}-${idx}`}
+                  >
+                    <span className="car">{idx === 0 ? "▶" : "›"}</span>
+                    <span className="id">BIDDER {bid.bidder.toUpperCase()}</span>
+                    <span className="amt figure">{cad.format(bid.amount)}</span>
+                    <span className="time">{bid.time}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="ledger-empty">
+                <strong>No accepted bids yet</strong>
+                Bids appear here as they are recorded.
+              </div>
+            )}
+          </div>
+        </div>
+      </article>
 
-      <p className="auction-hint">
-        Minimum next bid: <strong>{cad.format(minNext)}</strong>. Bids in the final{" "}
-        {auction.softCloseSeconds} s extend the bell by the same amount.
-      </p>
+      {showApply ? (
+        <div ref={applyRef}>
+          <BidderRegistration
+            auction={auction}
+            user={user}
+            bidderEmail={bidderEmail}
+            onBidderEmailChange={setBidderEmail}
+            onDismiss={() => setShowApply(false)}
+          />
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -328,14 +325,18 @@ function BidForm({
   auction,
   bids,
   bidderEmail,
+  hideEmailField,
   onBidderEmailChange,
-  onBidAccepted
+  onBidAccepted,
+  onAuthFailure
 }: {
   auction: ApiAuction;
   bids: DisplayBid[];
   bidderEmail: string;
+  hideEmailField: boolean;
   onBidderEmailChange: (email: string) => void;
   onBidAccepted: (payload: BidAcceptedPayload) => void;
+  onAuthFailure: () => void;
 }) {
   const [bidAmount, setBidAmount] = useState(0);
   const [bidError, setBidError] = useState("");
@@ -356,7 +357,7 @@ function BidForm({
       return;
     }
     if (!bidderEmail.trim()) {
-      setBidError("Enter the approved bidder email");
+      onAuthFailure();
       return;
     }
 
@@ -381,8 +382,17 @@ function BidForm({
       };
 
       if (!response.ok || !payload.accepted) {
-        setBidError(payload.reason ?? "Bid was not accepted");
+        const reason = payload.reason ?? "Bid was not accepted";
+        setBidError(reason);
         if (payload.minimumBidCents) setBidAmount(payload.minimumBidCents / 100);
+        // Auth-shaped failures (401/403/404) or "not approved / not found" → reveal apply form.
+        const reasonLower = reason.toLowerCase();
+        const looksLikeAuth =
+          response.status === 401 ||
+          response.status === 403 ||
+          response.status === 404 ||
+          /approve|authoriz|profile|not found|register|bidder/.test(reasonLower);
+        if (looksLikeAuth) onAuthFailure();
         return;
       }
 
@@ -402,17 +412,19 @@ function BidForm({
 
   return (
     <form className="bid-form" onSubmit={submitBid}>
-      <div className="field">
-        <label htmlFor="bidderEmail">Approved bidder · email</label>
-        <input
-          id="bidderEmail"
-          type="email"
-          autoComplete="email"
-          placeholder="bidder@operations.ca"
-          value={bidderEmail}
-          onChange={(event) => onBidderEmailChange(event.target.value)}
-        />
-      </div>
+      {hideEmailField ? null : (
+        <div className="field">
+          <label htmlFor="bidderEmail">Approved bidder · email</label>
+          <input
+            id="bidderEmail"
+            type="email"
+            autoComplete="email"
+            placeholder="bidder@operations.ca"
+            value={bidderEmail}
+            onChange={(event) => onBidderEmailChange(event.target.value)}
+          />
+        </div>
+      )}
       <div className="field">
         <label htmlFor="bidAmount">Bid command · increment {cad.format(increment)}</label>
         <div className="bid-input">
@@ -438,14 +450,19 @@ function BidForm({
 
 function BidderRegistration({
   auction,
+  user,
   bidderEmail,
-  onBidderEmailChange
+  onBidderEmailChange,
+  onDismiss
 }: {
   auction: ApiAuction;
+  user: AuthUser | null;
   bidderEmail: string;
   onBidderEmailChange: (email: string) => void;
+  onDismiss: () => void;
 }) {
-  const [legalName, setLegalName] = useState("");
+  const nextPath = `/auctions/?id=${auction.id}`;
+  const [legalName, setLegalName] = useState(user?.displayName ?? "");
   const [entityType, setEntityType] = useState("individual");
   const [phone, setPhone] = useState("");
   const [mailingAddress, setMailingAddress] = useState("");
@@ -498,14 +515,31 @@ function BidderRegistration({
   }
 
   return (
-    <aside className="register">
+    <aside className="register apply-panel">
       <header className="register-head">
-        <span className="pre">Bidder portal</span>
-        <h3>Apply to bid</h3>
-        <p className="note">
-          Submit identity &amp; proof of funds at least <strong>24 hours</strong> before the
-          bell. Approval is at Wyatt Realty Group&apos;s sole discretion.
-        </p>
+        <div className="apply-head-row">
+          <div>
+            <span className="pre">Apply to bid</span>
+            <h3>You&apos;re not approved for this lot yet.</h3>
+          </div>
+          <button type="button" className="apply-dismiss" onClick={onDismiss} aria-label="Close">
+            ×
+          </button>
+        </div>
+        {user ? (
+          <p className="note">
+            Submit identity &amp; proof of funds. Approval is at Wyatt Realty Group&apos;s sole
+            discretion — usually same-day.
+          </p>
+        ) : (
+          <div className="apply-anon-callout">
+            <p>
+              <a href={`/login/?next=${encodeURIComponent(nextPath)}`}>Sign in</a> or{" "}
+              <a href={`/signup/?next=${encodeURIComponent(nextPath)}`}>create an account</a>{" "}
+              to apply faster — or fill out the form below as a guest.
+            </p>
+          </div>
+        )}
       </header>
       <form className="register-form" onSubmit={submitRegistration}>
         <div className="field">

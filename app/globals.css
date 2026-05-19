@@ -4929,3 +4929,49 @@ footer.colophon {
     border-bottom: var(--hair-soft);
   }
 }
+
+/* Apply-to-bid panel — revealed below the ledger on bid rejection */
+.apply-panel {
+  margin: 28px 0 0;
+}
+.apply-panel .apply-head-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.apply-dismiss {
+  background: transparent;
+  border: 0;
+  color: rgba(239, 231, 211, 0.6);
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  transition: color 0.15s ease;
+}
+.apply-dismiss:hover {
+  color: var(--paper);
+}
+.apply-anon-callout {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  background: rgba(239, 231, 211, 0.08);
+  border: 1px solid rgba(239, 231, 211, 0.2);
+  border-radius: 2px;
+  font-family: var(--display);
+  color: var(--paper);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.apply-anon-callout p {
+  margin: 0;
+}
+.apply-anon-callout a {
+  color: var(--wheat);
+  border-bottom: 1px solid var(--wheat);
+}
+.apply-anon-callout a:hover {
+  color: var(--paper);
+  border-bottom-color: var(--paper);
+}

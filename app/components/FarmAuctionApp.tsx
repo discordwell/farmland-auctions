@@ -2,10 +2,10 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Menu, X } from "lucide-react";
 import { type Listing, type ListingStatus } from "../data";
 import { useAuth } from "../lib/useAuth";
 import { AuctionCatalog, type ApiAuction } from "../auctions/AuctionCatalog";
+import { SiteHeader } from "./SiteHeader";
 
 const LeafletMap = dynamic(() => import("./LeafletMap").then((m) => m.LeafletMap), {
   ssr: false,
@@ -279,7 +279,12 @@ function RmMap({
 }
 
 export function FarmAuctionApp() {
-  const { user, status: authStatus } = useAuth();
+  const { user, status: authStatus, signOut } = useAuth();
+
+  async function handleSignOut() {
+    await signOut();
+    window.location.assign("/");
+  }
   const [status, setStatus] = useState<Array<ListingStatus | "All">>(["All"]);
   const [region, setRegion] = useState("All");
   const [minAcres, setMinAcres] = useState("");
@@ -287,7 +292,6 @@ export function FarmAuctionApp() {
   const [maxPricePerAcre, setMaxPricePerAcre] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("newest");
-  const [mobileNav, setMobileNav] = useState(false);
   const [backendListings, setBackendListings] = useState<Listing[]>([]);
   const [isListingsLoading, setIsListingsLoading] = useState(true);
   const [listingError, setListingError] = useState("");
@@ -677,9 +681,8 @@ export function FarmAuctionApp() {
         </div>
         <div className="center">
           {featuredAuction && featuredAuction.status === "open" ? (
-            <span className="live-tag">
-              <span className="dot"></span>
-              Live · {cleanAuctionTitle(featuredAuction.title)} · closes in {minsRemaining} min
+            <span>
+              {cleanAuctionTitle(featuredAuction.title)} · closes in {minsRemaining} min
             </span>
           ) : (
             <span>Saskatchewan farmland · Wyatt Realty Group</span>
@@ -699,60 +702,13 @@ export function FarmAuctionApp() {
         </div>
       </div>
 
-      <header className="mast">
-        <div className="mast-inner">
-          <a className="wordmark" href="#top" aria-label="Wyatt Farmland Auctions home">
-            <span className="mark">W</span>
-            <span className="lockup">
-              <span className="name">Wyatt</span>
-              <span className="sub">Farmland Auctions</span>
-            </span>
-          </a>
-          <nav className={mobileNav ? "navlinks open" : "navlinks"} aria-label="Primary">
-            <a href="#inventory">Lots</a>
-            <a href="#floor" className={featuredAuction && featuredAuction.status === "open" ? "current" : ""}>
-              Auction
-            </a>
-            <a href="#procurement">Contact</a>
-            {user && user.role !== "admin" && (user.intent === "buyer" || user.intent === "both" || user.intent === null) ? (
-              <a href="/buyer/">Buyer</a>
-            ) : null}
-            {user && user.role !== "admin" && (user.intent === "seller" || user.intent === "both") ? (
-              <a href="/seller/">Seller</a>
-            ) : null}
-            {user && user.role === "admin" ? <a href="/admin/">Admin</a> : null}
-          </nav>
-          <div className="mast-actions">
-            {authStatus === "loading" ? null : user ? (
-              <a
-                className="auth-link mast-auth"
-                href={
-                  user.role === "admin"
-                    ? "/admin/"
-                    : user.intent === "seller"
-                      ? "/seller/"
-                      : "/buyer/"
-                }
-                title={user.email}
-              >
-                {user.displayName?.trim() ? user.displayName : user.email}
-              </a>
-            ) : (
-              <a className="auth-link mast-auth" href="/login/">
-                Sign in
-              </a>
-            )}
-            <button
-              className="nav-toggle"
-              type="button"
-              aria-label="Toggle navigation"
-              onClick={() => setMobileNav((value) => !value)}
-            >
-              {mobileNav ? <X size={18} /> : <Menu size={18} />}
-            </button>
-          </div>
-        </div>
-      </header>
+      <SiteHeader
+        user={user}
+        authStatus={authStatus}
+        onSignOut={handleSignOut}
+        onHome
+        highlightAuction={!!featuredAuction && featuredAuction.status === "open"}
+      />
 
       <section className="hero" id="top">
         <div className="hero-text">
@@ -791,16 +747,11 @@ export function FarmAuctionApp() {
         </div>
         <div className="hero-photo">
           <img src="/images/lots/hero.png" alt="Saskatchewan farmland at sunset" />
-          {featuredAuction && featuredAuction.status === "open" ? (
-            <span className="badge">
-              <span className="dot"></span>Live · {cleanAuctionTitle(featuredAuction.title)}
-            </span>
-          ) : null}
           {featuredAuction || featuredListing ? (
             <div className="caption">
               <div className="kicker">
                 {featuredAuction
-                  ? `Live · ${cleanAuctionTitle(featuredAuction.title)}`
+                  ? `Auction · ${cleanAuctionTitle(featuredAuction.title)}`
                   : `Featured · ${featuredListing!.rm}`}
               </div>
               <div className="title">
