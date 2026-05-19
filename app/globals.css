@@ -304,7 +304,30 @@ main {
 .mast-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
+}
+
+.mast-auth {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 4px;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mute);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.mast-auth:hover {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
 }
 
 .nav-toggle {

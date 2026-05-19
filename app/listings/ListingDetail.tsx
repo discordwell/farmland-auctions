@@ -118,13 +118,13 @@ export function ListingDetail({ initial = null, slug: slugProp }: ListingDetailP
             </span>
           </a>
           <nav className="navlinks" aria-label="Primary">
-            <a href="/#inventory">Inventory</a>
-            <a href="/#floor">Floor</a>
-            <a href="/#procurement">Procurement</a>
+            <a href="/#inventory">Lots</a>
+            <a href="/#floor">Auction</a>
+            <a href="/#procurement">Contact</a>
           </nav>
           <div className="mast-actions">
             <a className="btn btn-ghost btn-sm" href="/#inventory">
-              ← Back to inventory
+              ← Back to lots
             </a>
           </div>
         </div>
@@ -133,15 +133,15 @@ export function ListingDetail({ initial = null, slug: slugProp }: ListingDetailP
       <section className="band">
         {isLoading ? (
           <div className="lot-empty">
-            <strong>Loading the file</strong>
+            <strong>Loading</strong>
             One moment.
           </div>
         ) : error || !listing ? (
           <div className="lot-empty">
             <strong>{error || "Lot not found"}</strong>
-            The file may be unpublished or the link is stale.
+            The lot may be unpublished or the link is stale.
             <a className="btn btn-ghost btn-sm" href="/#inventory" style={{ marginTop: 12 }}>
-              Back to inventory →
+              Back to lots →
             </a>
           </div>
         ) : (
@@ -221,7 +221,7 @@ export function ListingDetail({ initial = null, slug: slugProp }: ListingDetailP
                   </div>
                   <div>
                     <dt>Soil final</dt>
-                    <dd>{listing.soilRating}/100</dd>
+                    <dd>{listing.soilRating}</dd>
                   </div>
                   <div>
                     <dt>Status</dt>
@@ -352,7 +352,7 @@ export function ListingDetail({ initial = null, slug: slugProp }: ListingDetailP
                   {listing.status === "Wanted"
                     ? "Match this buyer"
                     : listing.status === "Sold"
-                      ? "Closed file — request the record"
+                      ? "Closed — request the record"
                       : "Send a brief on this lot"}
                 </h2>
               </div>

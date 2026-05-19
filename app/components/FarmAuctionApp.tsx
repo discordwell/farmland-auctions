@@ -197,8 +197,8 @@ function LotCard({
             type="button"
             className={`lot-watch${watched ? " on" : ""}`}
             onClick={() => onToggleWatch(listing)}
-            aria-label={watched ? "Remove from watchlist" : "Save to watchlist"}
-            title={watched ? "Saved · click to remove" : "Save to watchlist"}
+            aria-label={watched ? "Remove from saved" : "Save"}
+            title={watched ? "Saved · click to remove" : "Save"}
           >
             {watched ? "★" : "☆"}
           </button>
@@ -234,13 +234,13 @@ function LotCard({
         <div className="bar">
           <div className="fill" style={{ right: `${soilGap}%` }}></div>
         </div>
-        <span className="val">{listing.soilRating}/100</span>
+        <span className="val">{listing.soilRating}</span>
       </div>
       <div className="lot-foot">
         <span className="type">{listing.region}</span>
         {isWanted ? (
           <a className="view" href="#procurement">
-            Submit a file →
+            Submit details →
           </a>
         ) : listing.slug ? (
           <a className="view" href={`/listings/${encodeURIComponent(listing.slug)}/`}>
@@ -386,8 +386,8 @@ function AuctionPanel({
           </div>
         </header>
         <div className="auction-empty">
-          <strong>{isLoading ? "Auction file loading" : "Registration is closed"}</strong>
-          New farmland auction files appear here when Wyatt Realty Group opens them.
+          <strong>{isLoading ? "Loading" : "Registration is closed"}</strong>
+          New auctions appear here when Wyatt Realty opens them.
         </div>
       </article>
     );
@@ -501,7 +501,7 @@ function AuctionPanel({
             <div className="ttl">
               <span className="pip">§</span>&nbsp; Bid ledger · accepted &amp; recorded
             </div>
-            <div className="count">{bids.length} of {bids.length}</div>
+            <div className="count">{bids.length} {bids.length === 1 ? "bid" : "bids"}</div>
           </header>
           {bids.length ? (
             <ul className="ledger-feed">
@@ -562,8 +562,8 @@ function RmMap({
           <LeafletMap listings={listings} lotNumberFor={lotNumberFor} />
         ) : (
           <div className="map-empty">
-            <strong>No mapped files</strong>
-            Listings with coordinates appear here.
+            <strong>No mapped lots</strong>
+            Lots with coordinates appear here.
           </div>
         )}
       </div>
@@ -804,7 +804,7 @@ function BidderRegistration({
 }
 
 export function FarmAuctionApp() {
-  const { user, status: authStatus, signOut } = useAuth();
+  const { user, status: authStatus } = useAuth();
   const [status, setStatus] = useState<Array<ListingStatus | "All">>(["All"]);
   const [region, setRegion] = useState("All");
   const [minAcres, setMinAcres] = useState("");
@@ -1209,11 +1209,6 @@ export function FarmAuctionApp() {
     return forSale ?? backendListings[0] ?? null;
   }, [backendListings]);
 
-  async function handleSignOut() {
-    await signOut();
-    window.location.assign("/");
-  }
-
   function toggleStatus(nextStatus: ListingStatus | "All") {
     if (nextStatus === "All") {
       setStatus(["All"]);
@@ -1266,55 +1261,22 @@ export function FarmAuctionApp() {
             </span>
           </a>
           <nav className={mobileNav ? "navlinks open" : "navlinks"} aria-label="Primary">
-            <a href="#inventory">The Inventory</a>
+            <a href="#inventory">Lots</a>
             <a href="#floor" className={liveAuction && liveAuction.status === "open" ? "current" : ""}>
-              The Floor
+              Auction
             </a>
-            <a href="#procurement">Procurement</a>
-            <a href="#almanac">The Almanac</a>
+            <a href="#procurement">Contact</a>
           </nav>
           <div className="mast-actions">
-            {authStatus === "loading" ? (
-              <span className="auth-chip placeholder" aria-hidden="true">
-                <span className="who">·</span>
-              </span>
-            ) : user ? (
-              <span className="auth-chip" aria-label="Account">
-                <span className="who" title={user.email}>
-                  {user.displayName?.trim() ? user.displayName : user.email}
-                </span>
-                {user.role === "admin" ? (
-                  <a className="auth-link" href="/admin/">
-                    Admin console
-                  </a>
-                ) : null}
-                <a className="auth-link" href="/account/">
-                  My account
-                </a>
-                <button
-                  className="auth-link auth-signout"
-                  type="button"
-                  onClick={handleSignOut}
-                >
-                  Sign out
-                </button>
-              </span>
+            {authStatus === "loading" ? null : user ? (
+              <a className="auth-link mast-auth" href="/account/" title={user.email}>
+                {user.displayName?.trim() ? user.displayName : user.email}
+              </a>
             ) : (
-              <span className="auth-chip">
-                <a className="auth-link" href="/login/">
-                  Sign in
-                </a>
-                <a className="auth-link auth-strong" href="/signup/">
-                  Sign up
-                </a>
-              </span>
+              <a className="auth-link mast-auth" href="/login/">
+                Sign in
+              </a>
             )}
-            <a className="btn btn-ghost btn-sm" href="#procurement">
-              Bring a file <span className="arrow">→</span>
-            </a>
-            <a className="btn btn-primary btn-sm" href="#floor">
-              Open auction <span className="arrow">→</span>
-            </a>
             <button
               className="nav-toggle"
               type="button"
@@ -1474,12 +1436,12 @@ export function FarmAuctionApp() {
 
       <section className="band" id="inventory">
         <div className="sec-head">
-          <span className="sign">§01 &nbsp; Inventory</span>
+          <span className="sign">§01 &nbsp; Lots</span>
           <h2 className="title">
-            Open <em>files.</em>
+            Open <em>lots.</em>
           </h2>
           <p className="lede">
-            Sale, lease, wanted, and pending farmland across Saskatchewan. Filter the docket.
+            Saskatchewan farmland — sale, lease, wanted, pending.
           </p>
         </div>
 
@@ -1583,8 +1545,8 @@ export function FarmAuctionApp() {
               ))
             ) : (
               <div className="lot-empty">
-                <strong>{isListingsLoading ? "Loading the book" : "No matching files"}</strong>
-                {listingError || "Adjust the docket filters to see open files."}
+                <strong>{isListingsLoading ? "Loading" : "No matching lots"}</strong>
+                {listingError || "Adjust the filters to see lots."}
               </div>
             )}
           </div>
@@ -1621,21 +1583,21 @@ export function FarmAuctionApp() {
         </section>
       ) : (
         <section className="floor-quiet" id="floor">
-          <span className="sign">§02 &nbsp; Auctions</span>
+          <span className="sign">§02 &nbsp; Auction</span>
           <p>
-            No auction on the floor. <a href="#procurement">Bring a file →</a>
+            No auction live. <a href="#procurement">Get in touch →</a>
           </p>
         </section>
       )}
 
       <section className="band" id="procurement">
         <div className="sec-head">
-          <span className="sign">§03 &nbsp; Procurement</span>
+          <span className="sign">§03 &nbsp; Contact</span>
           <h2 className="title">
-            Bring a file to the <em>floor.</em>
+            Reach <em>Cameron.</em>
           </h2>
           <p className="lede">
-            Sale, lease, wanted, or auction — Cameron Wyatt files Saskatchewan farmland.
+            Saskatchewan farmland — sale, lease, auction, or a property you&apos;re after.
           </p>
         </div>
         <div className="procurement">
@@ -1661,7 +1623,7 @@ export function FarmAuctionApp() {
               Tell us what you have, or <em>what you want.</em>
             </h2>
             <p className="lede">
-              A quarter to move. A buyer with cash. A multi-section file. Send the brief.
+              A quarter to move, a buyer with cash, or a block to find. Send a brief.
             </p>
 
             <form className="contact-form" onSubmit={submitContact}>
@@ -1678,7 +1640,7 @@ export function FarmAuctionApp() {
                 <input id="ct-email" name="email" type="email" autoComplete="email" placeholder="you@operations.ca" required />
               </div>
               <div className="field">
-                <label htmlFor="ct-type">File type</label>
+                <label htmlFor="ct-type">Type</label>
                 <select id="ct-type" name="fileType" defaultValue="Auction">
                   <option>Auction</option>
                   <option>For Sale</option>
@@ -1691,7 +1653,7 @@ export function FarmAuctionApp() {
                 <input id="ct-rm" name="rmHint" placeholder="e.g. RM Lipton No. 217" />
               </div>
               <div className="field full">
-                <label htmlFor="ct-msg">What&apos;s the file</label>
+                <label htmlFor="ct-msg">Details</label>
                 <textarea
                   id="ct-msg"
                   name="message"
@@ -1740,19 +1702,19 @@ export function FarmAuctionApp() {
             </div>
           </div>
           <div>
-            <h4>The book</h4>
+            <h4>Browse</h4>
             <ul>
               <li>
-                <a href="#inventory">Inventory</a>
+                <a href="#inventory">All lots</a>
               </li>
               <li>
-                <a href="#floor">Auction floor</a>
+                <a href="#floor">Live auction</a>
               </li>
               <li>
-                <a href="#inventory?status=Sold">Closed lots</a>
+                <a href="#inventory?status=Sold">Sold</a>
               </li>
               <li>
-                <a href="#inventory?status=Wanted">Wanted files</a>
+                <a href="#inventory?status=Wanted">Wanted</a>
               </li>
             </ul>
           </div>
@@ -1766,7 +1728,7 @@ export function FarmAuctionApp() {
                 <a href="/bidder-terms/">Bidder terms</a>
               </li>
               <li>
-                <a href="#procurement">Bring a file</a>
+                <a href="#procurement">Get in touch</a>
               </li>
             </ul>
           </div>
