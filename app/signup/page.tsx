@@ -1,12 +1,21 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { signupRequest } from "../lib/useAuth";
+import { signupRequest, type UserIntent } from "../lib/useAuth";
+
+type IntentChoice = Exclude<UserIntent, null>;
+
+const intentOptions: Array<{ value: IntentChoice; label: string; blurb: string }> = [
+  { value: "buyer", label: "Buying", blurb: "Watch lots, register, bid." },
+  { value: "seller", label: "Selling", blurb: "List a property, take inquiries." },
+  { value: "both", label: "Both", blurb: "I do both sides." }
+];
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [intent, setIntent] = useState<IntentChoice>("buyer");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -23,8 +32,9 @@ export default function SignupPage() {
     }
     setIsSubmitting(true);
     try {
-      await signupRequest(email.trim(), password, displayName.trim());
-      window.location.assign("/account/");
+      const user = await signupRequest(email.trim(), password, displayName.trim(), intent);
+      const next = user.intent === "seller" ? "/seller/" : "/buyer/";
+      window.location.assign(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign up failed");
       setIsSubmitting(false);
@@ -80,6 +90,24 @@ export default function SignupPage() {
                 placeholder="At least 8 characters"
                 required
               />
+            </div>
+            <div className="field">
+              <span className="label-text">I&apos;m here for</span>
+              <div className="intent-pills" role="radiogroup" aria-label="What brings you here">
+                {intentOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={intent === option.value}
+                    className={`intent-pill${intent === option.value ? " on" : ""}`}
+                    onClick={() => setIntent(option.value)}
+                  >
+                    <span className="intent-pill-label">{option.label}</span>
+                    <span className="intent-pill-blurb">{option.blurb}</span>
+                  </button>
+                ))}
+              </div>
             </div>
             <button
               className="btn btn-primary auth-submit"

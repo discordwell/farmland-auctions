@@ -19,12 +19,14 @@ export const SESSION_COOKIE = "farmauction_session";
 const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 export type AuthRole = "admin" | "user";
+export type UserIntent = "buyer" | "seller" | "both" | null;
 
 export type SessionUser = {
   id: string;
   email: string;
   role: AuthRole;
   displayName: string;
+  intent: UserIntent;
 };
 
 export async function hashPassword(password: string): Promise<string> {
@@ -107,6 +109,7 @@ type UserRow = {
   email: string;
   role: AuthRole;
   display_name: string;
+  intent: UserIntent;
 };
 
 function rowToUser(row: UserRow): SessionUser {
@@ -114,7 +117,8 @@ function rowToUser(row: UserRow): SessionUser {
     id: row.id,
     email: row.email,
     role: row.role,
-    displayName: row.display_name
+    displayName: row.display_name,
+    intent: row.intent ?? null
   };
 }
 
@@ -124,7 +128,7 @@ export async function getSessionUser(request: FastifyRequest): Promise<SessionUs
   if (!token) return null;
   const result = await query<UserRow & { expires_at: string }>(
     `
-      SELECT u.id, u.email, u.role, u.display_name, s.expires_at
+      SELECT u.id, u.email, u.role, u.display_name, u.intent, s.expires_at
       FROM user_sessions s
       JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1
@@ -163,7 +167,7 @@ export async function requireUser(request: FastifyRequest): Promise<SessionUser>
 
 export async function findUserByEmail(email: string) {
   const result = await query<UserRow & { password_hash: string }>(
-    "SELECT id, email, password_hash, role, display_name FROM users WHERE lower(email) = lower($1) LIMIT 1",
+    "SELECT id, email, password_hash, role, display_name, intent FROM users WHERE lower(email) = lower($1) LIMIT 1",
     [email]
   );
   return result.rows[0] ?? null;
@@ -174,15 +178,22 @@ export async function createUser(input: {
   password: string;
   displayName?: string;
   role?: AuthRole;
+  intent?: UserIntent;
 }) {
   const passwordHash = await hashPassword(input.password);
   const result = await query<UserRow>(
     `
-      INSERT INTO users (email, password_hash, display_name, role)
-      VALUES (lower($1), $2, $3, $4)
-      RETURNING id, email, role, display_name
+      INSERT INTO users (email, password_hash, display_name, role, intent)
+      VALUES (lower($1), $2, $3, $4, $5)
+      RETURNING id, email, role, display_name, intent
     `,
-    [input.email, passwordHash, input.displayName ?? "", input.role ?? "user"]
+    [
+      input.email,
+      passwordHash,
+      input.displayName ?? "",
+      input.role ?? "user",
+      input.intent ?? null
+    ]
   );
   return rowToUser(result.rows[0]);
 }

@@ -7,6 +7,7 @@ type SeedUser = {
   password: string;
   role: "admin" | "user";
   displayName: string;
+  intent: "buyer" | "seller" | "both" | null;
 };
 
 const demoUsers: SeedUser[] = [
@@ -14,19 +15,22 @@ const demoUsers: SeedUser[] = [
     email: "admin@farmauction.demo",
     password: "admin12345",
     role: "admin",
-    displayName: "Demo Admin"
+    displayName: "Demo Admin",
+    intent: null
   },
   {
     email: "buyer@farmauction.demo",
     password: "buyer12345",
     role: "user",
-    displayName: "Demo Buyer"
+    displayName: "Demo Buyer",
+    intent: "buyer"
   },
   {
     email: "seller@farmauction.demo",
     password: "seller12345",
     role: "user",
-    displayName: "Demo Seller"
+    displayName: "Demo Seller",
+    intent: "seller"
   }
 ];
 
@@ -36,15 +40,16 @@ async function upsertDemoUser(user: SeedUser) {
   const hash = await hashPassword(user.password);
   await query(
     `
-      INSERT INTO users (email, password_hash, role, display_name)
-      VALUES (lower($1), $2, $3, $4)
+      INSERT INTO users (email, password_hash, role, display_name, intent)
+      VALUES (lower($1), $2, $3, $4, $5)
       ON CONFLICT (email) DO UPDATE SET
         password_hash = EXCLUDED.password_hash,
         role = EXCLUDED.role,
         display_name = EXCLUDED.display_name,
+        intent = EXCLUDED.intent,
         updated_at = now()
     `,
-    [user.email, hash, user.role, user.displayName]
+    [user.email, hash, user.role, user.displayName, user.intent]
   );
 }
 

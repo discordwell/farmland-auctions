@@ -98,6 +98,16 @@ const newsletterBodySchema = z.object({
   source: z.string().min(2).default("website")
 });
 
+const sellerListingBodySchema = z.object({
+  title: z.string().min(3).max(160),
+  rm: z.string().min(2).max(120),
+  region: z.string().min(2).max(120),
+  acres: z.coerce.number().positive().max(100000),
+  intent: z.enum(["For Sale", "Lease", "Wanted"]).default("For Sale"),
+  targetPricePerAcre: z.coerce.number().nonnegative().max(1_000_000).optional(),
+  description: z.string().max(4000).default("")
+});
+
 const adminListingBodySchema = z.object({
   slug: z.string().min(3),
   title: z.string().min(3),
@@ -308,7 +318,8 @@ async function loadAuctionForAdmin(id: string) {
 const signupBodySchema = z.object({
   email: z.email().transform((value) => value.trim().toLowerCase()),
   password: z.string().min(8).max(120),
-  displayName: z.string().max(120).default("")
+  displayName: z.string().max(120).default(""),
+  intent: z.enum(["buyer", "seller", "both"]).nullable().default(null)
 });
 
 const loginBodySchema = z.object({
@@ -327,7 +338,8 @@ async function registerRoutes(app: FastifyInstance) {
       email: body.email,
       password: body.password,
       displayName: body.displayName,
-      role: "user"
+      role: "user",
+      intent: body.intent
     });
     const userAgent =
       (Array.isArray(request.headers["user-agent"])
@@ -362,7 +374,8 @@ async function registerRoutes(app: FastifyInstance) {
         id: row.id,
         email: row.email,
         role: row.role,
-        displayName: row.display_name
+        displayName: row.display_name,
+        intent: row.intent ?? null
       }
     };
   });
@@ -955,6 +968,133 @@ async function registerRoutes(app: FastifyInstance) {
 
     reply.status(201);
     return result;
+  });
+
+  app.get("/api/seller/summary", async (request) => {
+    const user = await requireUser(request);
+
+    const listingsResult = await query(
+      `
+        SELECT
+          l.id, l.slug, l.title, l.rm, l.region, l.acres,
+          l.price_per_acre_cents, l.status, l.published_at, l.created_at,
+          l.description
+        FROM listings l
+        WHERE l.seller_user_id = $1
+        ORDER BY l.created_at DESC
+      `,
+      [user.id]
+    );
+
+    const inquiriesResult = await query(
+      `
+        SELECT id, name, email, phone, file_type, message, created_at
+        FROM contact_inquiries
+        WHERE lower(email) = lower($1)
+        ORDER BY created_at DESC
+        LIMIT 50
+      `,
+      [user.email]
+    );
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        displayName: user.displayName,
+        intent: user.intent
+      },
+      listings: listingsResult.rows.map((row) => ({
+        id: row.id,
+        slug: row.slug,
+        title: row.title,
+        rm: row.rm,
+        region: row.region,
+        acres: Number(row.acres),
+        pricePerAcre: row.price_per_acre_cents
+          ? Number(row.price_per_acre_cents) / 100
+          : 0,
+        status: row.status,
+        description: row.description ?? "",
+        publishedAt: row.published_at,
+        createdAt: row.created_at
+      })),
+      inquiries: inquiriesResult.rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        phone: row.phone,
+        fileType: row.file_type,
+        message: row.message,
+        createdAt: row.created_at
+      }))
+    };
+  });
+
+  app.post("/api/seller/listings", async (request, reply) => {
+    const user = await requireUser(request);
+    const body = sellerListingBodySchema.parse(request.body);
+
+    const slugBase = body.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60) || "listing";
+    const slug = `${slugBase}-${randomUUID().slice(0, 8)}`;
+
+    const result = await query<{ id: string; slug: string }>(
+      `
+        INSERT INTO listings (
+          slug, title, rm, region, acres,
+          price_per_acre_cents, avg_assessment_per_quarter_cents, soil_final_rating,
+          status, hero_image_url, satellite_image_url, description,
+          seller_user_id
+        )
+        VALUES (
+          $1, $2, $3, $4, $5,
+          $6, 0, 0,
+          $7, '', '', $8,
+          $9
+        )
+        RETURNING id, slug
+      `,
+      [
+        slug,
+        body.title,
+        body.rm,
+        body.region,
+        body.acres,
+        body.targetPricePerAcre ? dollarsToCents(body.targetPricePerAcre) : 0,
+        body.intent,
+        body.description,
+        user.id
+      ]
+    );
+
+    if (config.opsNotifyEmail) {
+      await enqueueNotification({
+        body: [
+          `Seller: ${user.displayName || user.email} (${user.email})`,
+          `Title: ${body.title}`,
+          `RM: ${body.rm} · Region: ${body.region}`,
+          `Acres: ${body.acres}`,
+          `Intent: ${body.intent}`,
+          body.targetPricePerAcre
+            ? `Target $/ac: ${body.targetPricePerAcre}`
+            : "Target $/ac: not specified",
+          "",
+          body.description || "No description provided."
+        ].join("\n"),
+        eventType: "seller.listing.created",
+        metadata: { listingId: result.rows[0].id },
+        recipientEmail: config.opsNotifyEmail,
+        subject: `New seller draft: ${body.title}`
+      });
+    }
+
+    reply.status(201);
+    return { listing: result.rows[0] };
   });
 
   app.post("/api/newsletter-signups", async (request, reply) => {

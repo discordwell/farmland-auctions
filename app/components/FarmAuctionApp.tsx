@@ -1266,10 +1266,27 @@ export function FarmAuctionApp() {
               Auction
             </a>
             <a href="#procurement">Contact</a>
+            {user && user.role !== "admin" && (user.intent === "buyer" || user.intent === "both" || user.intent === null) ? (
+              <a href="/buyer/">Buyer</a>
+            ) : null}
+            {user && user.role !== "admin" && (user.intent === "seller" || user.intent === "both") ? (
+              <a href="/seller/">Seller</a>
+            ) : null}
+            {user && user.role === "admin" ? <a href="/admin/">Admin</a> : null}
           </nav>
           <div className="mast-actions">
             {authStatus === "loading" ? null : user ? (
-              <a className="auth-link mast-auth" href="/account/" title={user.email}>
+              <a
+                className="auth-link mast-auth"
+                href={
+                  user.role === "admin"
+                    ? "/admin/"
+                    : user.intent === "seller"
+                      ? "/seller/"
+                      : "/buyer/"
+                }
+                title={user.email}
+              >
                 {user.displayName?.trim() ? user.displayName : user.email}
               </a>
             ) : (

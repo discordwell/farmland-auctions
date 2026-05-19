@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { loginRequest } from "../lib/useAuth";
+import { loginRequest, type AuthUser } from "../lib/useAuth";
 
 type DemoAccount = {
   role: "admin" | "user";
@@ -41,13 +41,21 @@ function readNextParam(): string {
   return next;
 }
 
-function redirectAfterLogin(role: "admin" | "user") {
+function redirectAfterLogin(user: AuthUser) {
   const next = readNextParam();
   if (next) {
     window.location.assign(next);
     return;
   }
-  window.location.assign(role === "admin" ? "/admin/" : "/account/");
+  if (user.role === "admin") {
+    window.location.assign("/admin/");
+    return;
+  }
+  if (user.intent === "seller") {
+    window.location.assign("/seller/");
+    return;
+  }
+  window.location.assign("/buyer/");
 }
 
 export default function LoginPage() {
@@ -67,7 +75,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
     try {
       const user = await loginRequest(email.trim(), password);
-      redirectAfterLogin(user.role);
+      redirectAfterLogin(user);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed");
       setIsSubmitting(false);
@@ -80,7 +88,7 @@ export default function LoginPage() {
     setQuickSignIn(account.email);
     try {
       const user = await loginRequest(account.email, account.password);
-      redirectAfterLogin(user.role);
+      redirectAfterLogin(user);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed");
       setQuickSignIn("");

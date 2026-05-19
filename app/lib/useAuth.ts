@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+export type UserIntent = "buyer" | "seller" | "both" | null;
+
 export type AuthUser = {
   id: string;
   email: string;
   role: "admin" | "user";
   displayName: string;
+  intent: UserIntent;
 };
 
 type AuthState = {
@@ -82,10 +85,11 @@ export async function loginRequest(email: string, password: string) {
 export async function signupRequest(
   email: string,
   password: string,
-  displayName: string
+  displayName: string,
+  intent: UserIntent
 ) {
   const response = await fetch("/api/auth/signup", {
-    body: JSON.stringify({ email, password, displayName }),
+    body: JSON.stringify({ email, password, displayName, intent }),
     credentials: "include",
     headers: { "content-type": "application/json" },
     method: "POST"
