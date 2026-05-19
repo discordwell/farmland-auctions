@@ -109,6 +109,7 @@ function LotCard({
   const lotNo = formatLotNumber(lotIndex);
   const statusKey = statusSlug(listing.status);
   const isWanted = listing.status === "Wanted";
+  const soilGap = Math.max(0, Math.min(100, 100 - listing.soilRating));
 
   return (
     <article className="lot">
@@ -154,10 +155,22 @@ function LotCard({
           <dd>{cad.format(listing.avgAssessment)}</dd>
         </div>
         <div>
-          <dt>Final soil</dt>
+          <dt>SAMA rating</dt>
           <dd>{listing.soilRating}</dd>
         </div>
       </dl>
+      {isWanted ? null : (
+        <div
+          className="lot-soil"
+          title={`SAMA Final Rating ${listing.soilRating}/100 — Saskatchewan Assessment Management Agency arable-land productivity index`}
+        >
+          <span className="lbl">SAMA soil</span>
+          <div className="bar" aria-hidden="true">
+            <div className="fill" style={{ right: `${soilGap}%` }}></div>
+          </div>
+          <span className="val">{listing.soilRating}</span>
+        </div>
+      )}
       <div className="lot-foot">
         <span className="type">{listing.region}</span>
         {isWanted ? (
