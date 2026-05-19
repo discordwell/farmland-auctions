@@ -99,6 +99,15 @@ const newsletterBodySchema = z.object({
   source: z.string().min(2).default("website")
 });
 
+const bidderProfileBodySchema = z.object({
+  legalName: z.string().trim().min(2).max(200),
+  phone: z.string().trim().min(7).max(40).optional().or(z.literal("")),
+  entityType: z
+    .enum(["individual", "corporation", "partnership", "trust"])
+    .default("individual"),
+  mailingAddress: z.string().trim().max(1000).default("")
+});
+
 const sellerListingBodySchema = z.object({
   title: z.string().min(3).max(160),
   rm: z.string().min(2).max(120),
@@ -499,6 +508,36 @@ async function registerRoutes(app: FastifyInstance) {
         watchedAt: row.watched_at
       }))
     };
+  });
+
+  app.patch("/api/me/bidder", async (request) => {
+    assertSameOriginIfBrowserPost(request);
+    const user = await requireUser(request);
+    const body = bidderProfileBodySchema.parse(request.body);
+    const phone = body.phone && body.phone.length ? body.phone : null;
+
+    const result = await query(
+      `
+        INSERT INTO bidders (
+          email, legal_name, phone, entity_type, mailing_address, user_id
+        )
+        VALUES (lower($1), $2, $3, $4, $5, $6)
+        ON CONFLICT (email) DO UPDATE SET
+          legal_name = EXCLUDED.legal_name,
+          phone = EXCLUDED.phone,
+          entity_type = EXCLUDED.entity_type,
+          mailing_address = EXCLUDED.mailing_address,
+          user_id = COALESCE(bidders.user_id, EXCLUDED.user_id),
+          updated_at = now()
+        WHERE bidders.user_id IS NULL OR bidders.user_id = EXCLUDED.user_id
+        RETURNING *
+      `,
+      [user.email, body.legalName, phone, body.entityType, body.mailingAddress, user.id]
+    );
+    if (!result.rowCount) {
+      throw new ApiError(409, "This bidder file belongs to another account");
+    }
+    return { bidder: result.rows[0] };
   });
 
   app.post("/api/me/watchlist/:listingId", async (request, reply) => {

@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 
+import { SiteHeader } from "../components/SiteHeader";
 import { useAuth } from "../lib/useAuth";
 
 type SellerListing = {
@@ -195,24 +196,10 @@ export default function SellerPage() {
   const draftCount = listings.length - publishedCount;
 
   return (
-    <main className="hub">
-      <header className="hub-bar">
-        <a className="hub-back" href="/">
-          ← Wyatt Farmland Auctions
-        </a>
-        <div className="hub-bar-actions">
-          {user!.intent === "both" || user!.intent === "buyer" ? (
-            <a className="hub-switch" href="/buyer/">
-              Switch to buyer →
-            </a>
-          ) : null}
-          <button className="hub-signout" type="button" onClick={handleSignOut}>
-            Sign out
-          </button>
-        </div>
-      </header>
-
-      <section className="hub-head">
+    <>
+      <SiteHeader user={user} authStatus={authStatus} onSignOut={handleSignOut} />
+      <main className="hub">
+        <section className="hub-head">
         <p className="hub-eyebrow">Seller</p>
         <h1>
           Hi, <em>{user!.displayName?.trim() || user!.email.split("@")[0]}</em>.
@@ -451,6 +438,7 @@ export default function SellerPage() {
           </section>
         </>
       ) : null}
-    </main>
+      </main>
+    </>
   );
 }

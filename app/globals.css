@@ -334,6 +334,24 @@ main {
   display: none;
 }
 
+.mast-signout {
+  background: transparent;
+  border: 0;
+  padding: 0 4px;
+  height: 28px;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ember);
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s ease;
+}
+.mast-signout:hover {
+  border-bottom-color: var(--ember);
+}
+
 /* =========================================================
    4.  BUTTONS
    ========================================================= */
@@ -4387,6 +4405,22 @@ footer.colophon {
   text-transform: uppercase;
   color: var(--mute);
 }
+.hub-card-blurb {
+  margin: -4px 0 16px;
+  font-family: var(--display);
+  font-size: 0.98rem;
+  color: var(--mute);
+  max-width: 640px;
+}
+
+.hub-card-head .lot-status,
+.hub-row .lot-status {
+  position: static;
+  top: auto;
+  right: auto;
+  flex-shrink: 0;
+  align-self: center;
+}
 
 .hub-list {
   list-style: none;
@@ -4558,7 +4592,8 @@ footer.colophon {
   color: var(--mute);
 }
 .seller-form-grid input,
-.seller-form-grid textarea {
+.seller-form-grid textarea,
+.seller-form-grid select {
   width: 100%;
   padding: 10px 14px;
   background: var(--paper);
@@ -4574,7 +4609,8 @@ footer.colophon {
   resize: vertical;
 }
 .seller-form-grid input:focus,
-.seller-form-grid textarea:focus {
+.seller-form-grid textarea:focus,
+.seller-form-grid select:focus {
   border-color: var(--prairie);
 }
 .seller-form-foot {
