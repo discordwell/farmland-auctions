@@ -6,7 +6,6 @@ import { loginRequest } from "../lib/useAuth";
 type DemoAccount = {
   role: "admin" | "user";
   label: string;
-  blurb: string;
   email: string;
   password: string;
 };
@@ -15,21 +14,18 @@ const demoAccounts: DemoAccount[] = [
   {
     role: "admin",
     label: "Demo Admin",
-    blurb: "Operator console: listings, auctions, bidder approvals.",
     email: "admin@farmauction.demo",
     password: "admin12345"
   },
   {
     role: "user",
     label: "Demo Buyer",
-    blurb: "Bidder dashboard: watchlist, auction registrations, bid ledger.",
     email: "buyer@farmauction.demo",
     password: "buyer12345"
   },
   {
     role: "user",
     label: "Demo Seller",
-    blurb: "Vendor view of inquiries and post-auction next steps.",
     email: "seller@farmauction.demo",
     password: "seller12345"
   }
@@ -95,21 +91,13 @@ export default function LoginPage() {
     <main className="auth-page">
       <section className="auth-shell">
         <a className="terms-back" href="/">
-          ← Back to the floor
+          ← Home
         </a>
         <div className="terms-head">
           <div>
-            <p className="pre">
-              <span className="sign">§05 &nbsp; Sign in</span>
-            </p>
-            <h1>
-              The <em>operator&apos;s</em> door.
-            </h1>
+            <h1>Sign in</h1>
           </div>
         </div>
-        <p className="terms-intro">
-          Approved bidders sign in to track applications, watch bid status, and review post-close instructions. Wyatt operators sign in for the admin console.
-        </p>
 
         <div className="auth-grid">
           <form className="auth-form" onSubmit={submit}>
@@ -151,12 +139,7 @@ export default function LoginPage() {
           </form>
 
           <aside className="auth-aside">
-            <p className="pre">Demo · one-click sign-in</p>
-            <h3>Skip the password</h3>
-            <p className="auth-aside-lede">
-              Three demo personas wired to live data. Click a role to drop straight into the
-              session it owns.
-            </p>
+            <h3>Demo accounts</h3>
             <ul className="auth-demo-list">
               {demoAccounts.map((account) => {
                 const isLoading = quickSignIn === account.email;
@@ -170,9 +153,8 @@ export default function LoginPage() {
                       aria-busy={isLoading}
                     >
                       <span className="auth-demo-role">{account.label}</span>
-                      <span className="auth-demo-blurb">{account.blurb}</span>
                       <span className="auth-demo-cta">
-                        {isLoading ? "Signing in…" : "Sign in as this user"}{" "}
+                        {isLoading ? "Signing in…" : "Sign in"}{" "}
                         <span className="arrow">→</span>
                       </span>
                     </button>
@@ -180,10 +162,6 @@ export default function LoginPage() {
                 );
               })}
             </ul>
-            <p className="auth-aside-note">
-              Sessions persist in an <code>HttpOnly</code> session cookie. Sign out clears it
-              immediately.
-            </p>
           </aside>
         </div>
       </section>

@@ -35,23 +35,13 @@ export default function SignupPage() {
     <main className="auth-page">
       <section className="auth-shell">
         <a className="terms-back" href="/">
-          ← Back to the floor
+          ← Home
         </a>
         <div className="terms-head">
           <div>
-            <p className="pre">
-              <span className="sign">§06 &nbsp; Sign up</span>
-            </p>
-            <h1>
-              Open a <em>bidder</em> file.
-            </h1>
+            <h1>Sign up</h1>
           </div>
         </div>
-        <p className="terms-intro">
-          A bidder account lets you start an authorization application, save inquiries,
-          and watch the bell. Approval to bid on any specific auction is a separate step,
-          decided by Wyatt Realty Group on the floor record.
-        </p>
 
         <div className="auth-grid">
           <form className="auth-form" onSubmit={submit}>
@@ -106,17 +96,11 @@ export default function SignupPage() {
           </form>
 
           <aside className="auth-aside">
-            <p className="pre">House rules</p>
-            <h3>Bidder, not operator</h3>
-            <p className="auth-aside-lede">
-              This form creates a regular <strong>bidder</strong> account. Self-service
-              admin signup is not offered — for operator access, contact
-              {" "}<a href="mailto:cameron@wyattrealty.ca">Wyatt Realty Group</a>.
-            </p>
+            <h3>Bidder account</h3>
             <ul className="auth-aside-list">
-              <li>Identity, deposit, and proof-of-funds still go through the bidder portal on the auction floor.</li>
-              <li>Wyatt approves authorization at the brokerage&apos;s sole discretion.</li>
-              <li>By signing up you accept the <a href="/bidder-terms/">bidder terms</a> of the bell.</li>
+              <li>Identity, deposit, and proof-of-funds happen later, per auction.</li>
+              <li>Authorization is at Wyatt&apos;s discretion.</li>
+              <li>By signing up you accept the <a href="/bidder-terms/">bidder terms</a>.</li>
             </ul>
           </aside>
         </div>
