@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { Menu, X } from "lucide-react";
 import { type Listing, type ListingStatus } from "../data";
 import { useAuth } from "../lib/useAuth";
+import { AuctionCatalog, type ApiAuction } from "../auctions/AuctionCatalog";
 
 const LeafletMap = dynamic(() => import("./LeafletMap").then((m) => m.LeafletMap), {
   ssr: false,
@@ -39,66 +40,13 @@ const cad = new Intl.NumberFormat("en-CA", {
 
 const number = new Intl.NumberFormat("en-CA");
 
-const EDITION_DATE = new Intl.DateTimeFormat("en-CA", {
-  month: "long",
-  day: "numeric",
-  year: "numeric"
-}).format(new Date());
-
-type DisplayBid = {
-  id?: string;
-  bidder: string;
-  amount: number;
-  time: string;
-};
-
-type ApiBid = {
-  id: string;
-  bidderAlias: string;
-  amountDollars: number;
-  accepted: boolean;
-  createdAt: string;
-};
-
-type ApiAuction = {
-  id: string;
-  title: string;
-  status: string;
-  closesAt: string;
-  bidIncrementCents: number;
-  reserveMet: boolean;
-  softCloseSeconds?: number;
-  currentHighBidCents: number;
-  currentHighBidDollars: number;
-};
-
-type BidAcceptedPayload = {
-  accepted: boolean;
-  bid: ApiBid;
-  auction: ApiAuction;
-};
-
-function formatTime(value: string) {
-  return new Date(value).toLocaleTimeString("en-CA", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false
-  });
-}
-
-function mapApiBid(bid: ApiBid): DisplayBid {
-  return {
-    id: bid.id,
-    bidder: bid.bidderAlias,
-    amount: bid.amountDollars,
-    time: formatTime(bid.createdAt)
-  };
-}
-
 function secondsUntil(value?: string) {
   if (!value) return 0;
   return Math.max(0, Math.floor((new Date(value).getTime() - Date.now()) / 1000));
+}
+
+function cleanAuctionTitle(raw: string) {
+  return raw.replace(/^DEMO\s*·\s*/i, "");
 }
 
 function clampPercent(value: number) {
@@ -256,279 +204,6 @@ function LotCard({
   );
 }
 
-function Countdown({ closesAt }: { closesAt?: string }) {
-  const [seconds, setSeconds] = useState(() => secondsUntil(closesAt));
-
-  useEffect(() => {
-    setSeconds(secondsUntil(closesAt));
-    const id = window.setInterval(() => {
-      setSeconds(secondsUntil(closesAt));
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [closesAt]);
-
-  const hrs = Math.floor(seconds / 3600).toString().padStart(2, "0");
-  const mins = Math.floor((seconds % 3600) / 60).toString().padStart(2, "0");
-  const secs = (seconds % 60).toString().padStart(2, "0");
-
-  return (
-    <div className="countdown" aria-label="Time remaining">
-      <div className="lbl">Time to bell</div>
-      <div className="clock">
-        <span>
-          {hrs}
-          <span className="unit">hr</span>
-        </span>
-        <span className="sep">:</span>
-        <span>
-          {mins}
-          <span className="unit">min</span>
-        </span>
-        <span className="sep">:</span>
-        <span>
-          {secs}
-          <span className="unit">sec</span>
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function AuctionPanel({
-  auction,
-  bids,
-  bidderEmail,
-  isLoading,
-  onBidderEmailChange,
-  onBidAccepted
-}: {
-  auction: ApiAuction | null;
-  bids: DisplayBid[];
-  bidderEmail: string;
-  isLoading: boolean;
-  onBidderEmailChange: (email: string) => void;
-  onBidAccepted: (payload: BidAcceptedPayload) => void;
-}) {
-  const [bidAmount, setBidAmount] = useState(0);
-  const [bidError, setBidError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    const increment = (auction?.bidIncrementCents ?? 0) / 100;
-    const currentHigh = Math.max(auction?.currentHighBidDollars ?? 0, bids[0]?.amount ?? 0);
-    setBidAmount(currentHigh + increment);
-  }, [auction?.bidIncrementCents, auction?.currentHighBidDollars, bids]);
-
-  async function submitBid(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBidError("");
-
-    if (!auction) {
-      setBidError("No active auction");
-      return;
-    }
-    if (auction.status !== "open") {
-      setBidError("Auction is not open");
-      return;
-    }
-    if (!bidderEmail.trim()) {
-      setBidError("Enter the approved bidder email");
-      return;
-    }
-
-    const increment = auction.bidIncrementCents / 100;
-    const currentHigh = Math.max(auction.currentHighBidDollars, bids[0]?.amount ?? 0);
-    const safeBid = Math.max(bidAmount, currentHigh + increment);
-
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(`/api/auctions/${auction.id}/bids`, {
-        body: JSON.stringify({
-          amountCents: Math.round(safeBid * 100),
-          bidderEmail: bidderEmail.trim(),
-          idempotencyKey: crypto.randomUUID()
-        }),
-        headers: { "content-type": "application/json" },
-        method: "POST"
-      });
-      const payload = (await response.json()) as BidAcceptedPayload & {
-        minimumBidCents?: number;
-        reason?: string;
-      };
-
-      if (!response.ok || !payload.accepted) {
-        setBidError(payload.reason ?? "Bid was not accepted");
-        if (payload.minimumBidCents) setBidAmount(payload.minimumBidCents / 100);
-        return;
-      }
-
-      onBidAccepted(payload);
-      setBidAmount(
-        payload.auction.currentHighBidDollars + payload.auction.bidIncrementCents / 100
-      );
-    } catch {
-      setBidError("Bid service is offline");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  if (!auction) {
-    return (
-      <article className="auction" aria-labelledby="auction-h">
-        <header className="auction-top">
-          <div>
-            <span className="live" style={{ color: "#b9b08f" }}>
-              {isLoading ? "· Loading floor" : "· Floor closed"}
-            </span>
-            <h2 id="auction-h">{isLoading ? "Checking the bell" : "No live auction"}</h2>
-            <div className="legal">Wyatt Realty Group · Regina · Treaty 4</div>
-          </div>
-        </header>
-        <div className="auction-empty">
-          <strong>{isLoading ? "Loading" : "Registration is closed"}</strong>
-          New auctions appear here when Wyatt Realty opens them.
-        </div>
-      </article>
-    );
-  }
-
-  const currentHigh = Math.max(auction.currentHighBidDollars, bids[0]?.amount ?? 0);
-  const isOpen = auction.status === "open";
-  const increment = auction.bidIncrementCents / 100;
-  const minNext = currentHigh + increment;
-
-  return (
-    <article className="auction" aria-labelledby="auction-h">
-      <header className="auction-top">
-        <div>
-          <span className="live" aria-hidden={!isOpen}>
-            {isOpen ? <span className="dot"></span> : null}
-            {isOpen ? "Live · " : "· "}
-            {auction.status.toUpperCase()} · Bell at {new Date(auction.closesAt).toLocaleTimeString("en-CA", {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false
-            })} CST
-          </span>
-          <h2 id="auction-h">{auction.title}</h2>
-          <div className="legal">
-            Approved bidders only
-            {auction.softCloseSeconds && auction.softCloseSeconds > 0
-              ? ` · Soft-close ${auction.softCloseSeconds}s`
-              : ""}
-          </div>
-        </div>
-        <Countdown closesAt={auction.closesAt} />
-      </header>
-
-      <div className="auction-body">
-        <div className="bid-now">
-          <div className="row1">
-            <div>
-              <div className="lbl">Current high bid</div>
-              <div className="price figure">
-                <span className="cur">CAD</span>
-                {currentHigh > 0 ? number.format(currentHigh) : "—"}
-                {currentHigh > 0 && bids.length ? (
-                  <span className="ppa">
-                    bid no. {bids.length} · increment {cad.format(increment)}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-            {auction.reserveMet ? (
-              <div className="stamp">
-                Reserve
-                <br />
-                Met
-                <span className="sub">{EDITION_DATE}</span>
-              </div>
-            ) : (
-              <div className="stamp pending">
-                Reserve
-                <br />
-                Pending
-                <span className="sub">Bell open</span>
-              </div>
-            )}
-          </div>
-
-          <form className="bid-form" onSubmit={submitBid}>
-            <div className="field">
-              <label htmlFor="bidderEmail">Approved bidder · email</label>
-              <input
-                id="bidderEmail"
-                type="email"
-                autoComplete="email"
-                placeholder="bidder@operations.ca"
-                value={bidderEmail}
-                onChange={(event) => onBidderEmailChange(event.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="bidAmount">Bid command · increment {cad.format(increment)}</label>
-              <div className="bid-input">
-                <span className="cur">CAD</span>
-                <input
-                  id="bidAmount"
-                  inputMode="numeric"
-                  value={Number.isFinite(bidAmount) ? bidAmount : 0}
-                  onChange={(event) => {
-                    const parsed = Number(event.target.value.replace(/[^0-9.]/g, ""));
-                    setBidAmount(Number.isFinite(parsed) ? parsed : 0);
-                  }}
-                />
-                <button type="submit" disabled={isSubmitting || !isOpen}>
-                  {isSubmitting ? "Sending" : isOpen ? "Drop the gavel ▾" : "Closed"}
-                </button>
-              </div>
-            </div>
-            <div className="hint">
-              Minimum next bid: <strong>{cad.format(minNext)}</strong>.
-              {auction.softCloseSeconds && auction.softCloseSeconds > 0 ? (
-                <>
-                  {" "}Bids in the final {auction.softCloseSeconds} s extend the bell by {auction.softCloseSeconds} s.
-                </>
-              ) : null}
-            </div>
-            {bidError ? <p className="form-status">{bidError}</p> : null}
-          </form>
-        </div>
-
-        <div className="ledger">
-          <header className="ledger-head">
-            <div className="ttl">
-              <span className="pip">§</span>&nbsp; Bid ledger · accepted &amp; recorded
-            </div>
-            <div className="count">{bids.length} {bids.length === 1 ? "bid" : "bids"}</div>
-          </header>
-          {bids.length ? (
-            <ul className="ledger-feed">
-              {bids.map((bid, idx) => (
-                <li
-                  className={idx === 0 ? "high" : ""}
-                  key={bid.id ?? `${bid.bidder}-${bid.time}-${idx}`}
-                >
-                  <span className="car">{idx === 0 ? "▶" : "›"}</span>
-                  <span className="id">BIDDER {bid.bidder.toUpperCase()}</span>
-                  <span className="amt figure">{cad.format(bid.amount)}</span>
-                  <span className="time">{bid.time}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="ledger-empty">
-              <strong>No accepted bids yet</strong>
-              Bids appear here as they are recorded.
-            </div>
-          )}
-        </div>
-      </div>
-    </article>
-  );
-}
-
 function RmMap({
   listings,
   lotNumberFor
@@ -603,206 +278,6 @@ function RmMap({
   );
 }
 
-function BidderRegistration({
-  auction,
-  bidderEmail,
-  onBidderEmailChange
-}: {
-  auction: ApiAuction | null;
-  bidderEmail: string;
-  onBidderEmailChange: (email: string) => void;
-}) {
-  const [legalName, setLegalName] = useState("");
-  const [entityType, setEntityType] = useState("individual");
-  const [phone, setPhone] = useState("");
-  const [mailingAddress, setMailingAddress] = useState("");
-  const [identityDocumentUrl, setIdentityDocumentUrl] = useState("");
-  const [proofOfFundsUrl, setProofOfFundsUrl] = useState("");
-  const [depositReference, setDepositReference] = useState("");
-  const [bidderNotes, setBidderNotes] = useState("");
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [status, setStatus] = useState("");
-  const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  async function submitRegistration(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!auction) return;
-    setStatus("");
-    setError("");
-    setIsSubmitting(true);
-
-    try {
-      const response = await fetch(`/api/auctions/${auction.id}/register`, {
-        body: JSON.stringify({
-          email: bidderEmail.trim(),
-          bidderNotes: bidderNotes.trim(),
-          depositReference: depositReference.trim(),
-          entityType,
-          identityDocumentUrl: identityDocumentUrl.trim(),
-          legalName: legalName.trim(),
-          mailingAddress: mailingAddress.trim(),
-          phone: phone.trim() || undefined,
-          proofOfFundsUrl: proofOfFundsUrl.trim(),
-          termsVersion: "2026-05-18",
-          termsAccepted
-        }),
-        headers: { "content-type": "application/json" },
-        method: "POST"
-      });
-
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => ({}))) as { message?: string };
-        setError(payload.message ?? "Registration was not accepted");
-        return;
-      }
-
-      setStatus("Registration submitted. Approval is required before bidding.");
-    } catch {
-      setError("Registration service is offline");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  if (!auction) {
-    return (
-      <aside className="register">
-        <header className="register-head">
-          <span className="pre">Bidder portal</span>
-          <h3>Apply to bid</h3>
-        </header>
-        <div className="register-empty">
-          <strong>No floor open</strong>
-          Registration opens with the next auction.
-        </div>
-      </aside>
-    );
-  }
-
-  return (
-    <aside className="register">
-      <header className="register-head">
-        <span className="pre">§02·b &nbsp; Bidder portal</span>
-        <h3>Apply to bid</h3>
-        <p className="note">
-          Submit identity &amp; proof of funds at least <strong>24 hours</strong> before the bell. Approval is at Wyatt Realty Group&apos;s sole discretion.
-        </p>
-      </header>
-      <form className="register-form" onSubmit={submitRegistration}>
-        <div className="field">
-          <label htmlFor="reg-name">Legal name</label>
-          <input
-            id="reg-name"
-            value={legalName}
-            onChange={(event) => setLegalName(event.target.value)}
-            autoComplete="organization"
-            placeholder="Grant Olson"
-            required
-          />
-        </div>
-        <div className="grid2">
-          <div className="field">
-            <label htmlFor="reg-entity">Entity</label>
-            <select id="reg-entity" value={entityType} onChange={(event) => setEntityType(event.target.value)}>
-              <option value="individual">Individual</option>
-              <option value="corporation">Corporation</option>
-              <option value="partnership">Partnership</option>
-              <option value="trust">Trust</option>
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="reg-phone">Phone</label>
-            <input
-              id="reg-phone"
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              autoComplete="tel"
-              placeholder="306 555 0119"
-            />
-          </div>
-        </div>
-        <div className="field">
-          <label htmlFor="reg-email">Email</label>
-          <input
-            id="reg-email"
-            type="email"
-            value={bidderEmail}
-            onChange={(event) => onBidderEmailChange(event.target.value)}
-            autoComplete="email"
-            placeholder="bidder@operations.ca"
-            required
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="reg-mail">Mailing address</label>
-          <textarea
-            id="reg-mail"
-            value={mailingAddress}
-            onChange={(event) => setMailingAddress(event.target.value)}
-            placeholder="Box, RM, Province, Postal Code"
-            required
-          />
-        </div>
-        <div className="grid2">
-          <div className="field">
-            <label htmlFor="reg-id">ID document — link</label>
-            <input
-              id="reg-id"
-              value={identityDocumentUrl}
-              onChange={(event) => setIdentityDocumentUrl(event.target.value)}
-              placeholder="dropbox.com/..."
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="reg-funds">Proof of funds — link</label>
-            <input
-              id="reg-funds"
-              value={proofOfFundsUrl}
-              onChange={(event) => setProofOfFundsUrl(event.target.value)}
-              placeholder="dropbox.com/..."
-            />
-          </div>
-        </div>
-        <div className="field">
-          <label htmlFor="reg-deposit">Deposit reference</label>
-          <input
-            id="reg-deposit"
-            value={depositReference}
-            onChange={(event) => setDepositReference(event.target.value)}
-            placeholder="Wire ref · trust account"
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="reg-notes">Notes</label>
-          <textarea
-            id="reg-notes"
-            value={bidderNotes}
-            onChange={(event) => setBidderNotes(event.target.value)}
-            placeholder="Anything Wyatt Realty should know."
-          />
-        </div>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={termsAccepted}
-            onChange={(event) => setTermsAccepted(event.target.checked)}
-            required
-          />
-          <span>
-            I accept the <a href="/bidder-terms/">bidder terms</a> for this floor.
-          </span>
-        </label>
-        <button className="submit" type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Submitting" : "Submit for approval"} <span className="arrow">→</span>
-        </button>
-        {status ? <p className="form-status success">{status}</p> : null}
-        {error ? <p className="form-status">{error}</p> : null}
-      </form>
-    </aside>
-  );
-}
-
 export function FarmAuctionApp() {
   const { user, status: authStatus } = useAuth();
   const [status, setStatus] = useState<Array<ListingStatus | "All">>(["All"]);
@@ -816,10 +291,8 @@ export function FarmAuctionApp() {
   const [backendListings, setBackendListings] = useState<Listing[]>([]);
   const [isListingsLoading, setIsListingsLoading] = useState(true);
   const [listingError, setListingError] = useState("");
-  const [liveAuction, setLiveAuction] = useState<ApiAuction | null>(null);
-  const [isAuctionLoading, setIsAuctionLoading] = useState(true);
-  const [liveBids, setLiveBids] = useState<DisplayBid[]>([]);
-  const [bidderEmail, setBidderEmail] = useState("");
+  const [liveAuctions, setLiveAuctions] = useState<ApiAuction[]>([]);
+  const [isAuctionsLoading, setIsAuctionsLoading] = useState(true);
   const [contactStatus, setContactStatus] = useState("");
   const [contactError, setContactError] = useState("");
   const [newsletterEmail, setNewsletterEmail] = useState("");
@@ -933,60 +406,31 @@ export function FarmAuctionApp() {
   }, []);
 
   useEffect(() => {
-    let source: EventSource | undefined;
     let cancelled = false;
-
-    async function loadAuction() {
-      setIsAuctionLoading(true);
-      try {
-        const auctionsResponse = await fetch("/api/auctions");
-        if (!auctionsResponse.ok) throw new Error("No auctions");
-        const auctionsPayload = (await auctionsResponse.json()) as { auctions: ApiAuction[] };
-        const auction = auctionsPayload.auctions[0];
-        if (!auction || cancelled) {
-          setLiveAuction(null);
-          setLiveBids([]);
-          return;
-        }
-
-        const detailResponse = await fetch(`/api/auctions/${auction.id}`);
-        if (!detailResponse.ok) throw new Error("Auction detail failed");
-        const detail = (await detailResponse.json()) as {
-          auction: ApiAuction;
-          bidHistory: ApiBid[];
-        };
-
+    setIsAuctionsLoading(true);
+    fetch("/api/auctions")
+      .then((response) => {
+        if (!response.ok) throw new Error("Auctions service is offline");
+        return response.json() as Promise<{ auctions: ApiAuction[] }>;
+      })
+      .then((payload) => {
         if (cancelled) return;
-        setLiveAuction(detail.auction);
-        setLiveBids(detail.bidHistory.filter((bid) => bid.accepted).map(mapApiBid));
-
-        source = new EventSource(`/api/auctions/${auction.id}/events`);
-        source.addEventListener("bid.accepted", (event) => {
-          const payload = JSON.parse(event.data) as BidAcceptedPayload;
-          handleBidAccepted(payload);
-        });
-      } catch {
-        setLiveAuction(null);
-        setLiveBids([]);
-      } finally {
-        if (!cancelled) setIsAuctionLoading(false);
-      }
-    }
-
-    loadAuction();
+        // Sort soonest-closing first so the home catalog leads with urgency.
+        const sorted = [...payload.auctions].sort(
+          (a, b) => new Date(a.closesAt).getTime() - new Date(b.closesAt).getTime()
+        );
+        setLiveAuctions(sorted);
+      })
+      .catch(() => {
+        if (!cancelled) setLiveAuctions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsAuctionsLoading(false);
+      });
     return () => {
       cancelled = true;
-      source?.close();
     };
   }, []);
-
-  function handleBidAccepted(payload: BidAcceptedPayload) {
-    setLiveAuction(payload.auction);
-    setLiveBids((current) => {
-      if (current.some((bid) => bid.id === payload.bid.id)) return current;
-      return [mapApiBid(payload.bid), ...current].slice(0, 8);
-    });
-  }
 
   // URL-state sync — read from URL on mount + on popstate/hashchange, and write back on every filter change.
   const skipNextUrlWrite = useRef(true);
@@ -1197,11 +641,15 @@ export function FarmAuctionApp() {
     return Math.round(priced.reduce((sum, listing) => sum + listing.pricePerAcre, 0) / priced.length);
   }, [backendListings]);
 
-  const highBidCurrent = Math.max(
-    liveAuction?.currentHighBidDollars ?? 0,
-    liveBids[0]?.amount ?? 0
+  // Sorted soonest-closing first by the loader; the home page features that one.
+  const featuredAuction = liveAuctions[0] ?? null;
+  const openAuctions = useMemo(
+    () => liveAuctions.filter((auction) => auction.status === "open"),
+    [liveAuctions]
   );
-  const secsRemaining = secondsUntil(liveAuction?.closesAt);
+  const openAuctionCount = openAuctions.length;
+  const highBidCurrent = featuredAuction?.currentHighBidDollars ?? 0;
+  const secsRemaining = secondsUntil(featuredAuction?.closesAt);
   const minsRemaining = Math.floor(secsRemaining / 60);
 
   const featuredListing = useMemo(() => {
@@ -1228,10 +676,10 @@ export function FarmAuctionApp() {
           <span>Regina, SK · Treaty 4</span>
         </div>
         <div className="center">
-          {liveAuction && liveAuction.status === "open" ? (
+          {featuredAuction && featuredAuction.status === "open" ? (
             <span className="live-tag">
               <span className="dot"></span>
-              Live · {liveAuction.title} · closes in {minsRemaining} min
+              Live · {cleanAuctionTitle(featuredAuction.title)} · closes in {minsRemaining} min
             </span>
           ) : (
             <span>Saskatchewan farmland · Wyatt Realty Group</span>
@@ -1262,7 +710,7 @@ export function FarmAuctionApp() {
           </a>
           <nav className={mobileNav ? "navlinks open" : "navlinks"} aria-label="Primary">
             <a href="#inventory">Lots</a>
-            <a href="#floor" className={liveAuction && liveAuction.status === "open" ? "current" : ""}>
+            <a href="#floor" className={featuredAuction && featuredAuction.status === "open" ? "current" : ""}>
               Auction
             </a>
             <a href="#procurement">Contact</a>
@@ -1334,29 +782,29 @@ export function FarmAuctionApp() {
             <a className="btn btn-ghost" href="#inventory">
               Browse the inventory
             </a>
-            {liveAuction && liveAuction.status === "open" ? (
+            {featuredAuction && featuredAuction.status === "open" ? (
               <span className="meta">
-                Bell · {new Date(liveAuction.closesAt).toLocaleTimeString("en-CA", { hour: "2-digit", minute: "2-digit", hour12: false })} CST
+                Bell · {new Date(featuredAuction.closesAt).toLocaleTimeString("en-CA", { hour: "2-digit", minute: "2-digit", hour12: false })} CST
               </span>
             ) : null}
           </div>
         </div>
         <div className="hero-photo">
           <img src="/images/lots/hero.png" alt="Saskatchewan farmland at sunset" />
-          {liveAuction && liveAuction.status === "open" ? (
+          {featuredAuction && featuredAuction.status === "open" ? (
             <span className="badge">
-              <span className="dot"></span>Live · {liveAuction.title}
+              <span className="dot"></span>Live · {cleanAuctionTitle(featuredAuction.title)}
             </span>
           ) : null}
-          {liveAuction || featuredListing ? (
+          {featuredAuction || featuredListing ? (
             <div className="caption">
               <div className="kicker">
-                {liveAuction
-                  ? `Live · ${liveAuction.title}`
+                {featuredAuction
+                  ? `Live · ${cleanAuctionTitle(featuredAuction.title)}`
                   : `Featured · ${featuredListing!.rm}`}
               </div>
               <div className="title">
-                {liveAuction ? (
+                {featuredAuction ? (
                   <em>Open ledger.</em>
                 ) : (
                   <>
@@ -1371,26 +819,26 @@ export function FarmAuctionApp() {
                   <div className="lbl">Acres</div>
                   <div className="val">
                     {number.format(
-                      liveAuction
+                      featuredAuction
                         ? Math.round(totalAcres)
                         : Math.round(featuredListing!.acres)
                     )}
                   </div>
                 </div>
                 <div>
-                  <div className="lbl">{liveAuction ? "Reserve" : "$/ac"}</div>
+                  <div className="lbl">{featuredAuction ? "Reserve" : "$/ac"}</div>
                   <div className="val">
-                    {liveAuction
-                      ? liveAuction.reserveMet
+                    {featuredAuction
+                      ? featuredAuction.reserveMet
                         ? "Met"
                         : "Open"
                       : cad.format(featuredListing!.pricePerAcre)}
                   </div>
                 </div>
                 <div>
-                  <div className="lbl">{liveAuction ? "High bid" : "Status"}</div>
+                  <div className="lbl">{featuredAuction ? "High bid" : "Status"}</div>
                   <div className="val">
-                    {liveAuction
+                    {featuredAuction
                       ? highBidCurrent > 0
                         ? cad.format(highBidCurrent)
                         : "—"
@@ -1429,13 +877,15 @@ export function FarmAuctionApp() {
             Auctions <span className="pip">§</span>
           </div>
           <div className="val figure">
-            {liveAuction && liveAuction.status === "open" ? "1" : "0"}
-            <span className="unit">live</span>
+            {number.format(openAuctionCount)}
+            <span className="unit">{openAuctionCount === 1 ? "live" : "live"}</span>
           </div>
-          <div className={liveAuction && liveAuction.status === "open" ? "foot live" : "foot"}>
-            {liveAuction && liveAuction.status === "open"
-              ? `● ${minsRemaining} min remaining`
-              : "No auction open"}
+          <div className={openAuctionCount > 0 ? "foot live" : "foot"}>
+            {openAuctionCount === 0
+              ? "No auction open"
+              : featuredAuction
+                ? `● Soonest closes in ${minsRemaining} min`
+                : ""}
           </div>
         </div>
         <div className="cell">
@@ -1445,8 +895,8 @@ export function FarmAuctionApp() {
           <div className="val figure">
             {highBidCurrent > 0 ? cad.format(highBidCurrent) : "—"}
           </div>
-          <div className={liveAuction?.reserveMet ? "foot up" : "foot"}>
-            {liveAuction?.reserveMet ? "▲ Reserve met" : "Reserve pending"}
+          <div className={featuredAuction?.reserveMet ? "foot up" : "foot"}>
+            {featuredAuction?.reserveMet ? "▲ Reserve met" : "Reserve pending"}
           </div>
         </div>
       </div>
@@ -1571,41 +1021,22 @@ export function FarmAuctionApp() {
         </div>
       </section>
 
-      {liveAuction || isAuctionLoading ? (
-        <section className="band floor" id="floor">
-          <div className="sec-head">
-            <span className="sign">§02 &nbsp; The auction floor</span>
-            <h2 className="title">
-              A reserve, a bell, an <em>open ledger.</em>
-            </h2>
-            <p className="lede">
-              Approved bidders only. Reserve is published before the bell. Every accepted bid is timestamped to the ledger.
-            </p>
-          </div>
-          <div className="floor-grid">
-            <AuctionPanel
-              auction={liveAuction}
-              bids={liveBids}
-              bidderEmail={bidderEmail}
-              isLoading={isAuctionLoading}
-              onBidderEmailChange={setBidderEmail}
-              onBidAccepted={handleBidAccepted}
-            />
-            <BidderRegistration
-              auction={liveAuction}
-              bidderEmail={bidderEmail}
-              onBidderEmailChange={setBidderEmail}
-            />
-          </div>
-        </section>
-      ) : (
-        <section className="floor-quiet" id="floor">
-          <span className="sign">§02 &nbsp; Auction</span>
-          <p>
-            No auction live. <a href="#procurement">Get in touch →</a>
+      <section className="band" id="floor">
+        <div className="sec-head">
+          <span className="sign">§02 &nbsp; Auctions</span>
+          <h2 className="title">
+            Open <em>auctions.</em>
+          </h2>
+          <p className="lede">
+            Reserves published. Bell drops on schedule. Click through to bid.
           </p>
-        </section>
-      )}
+        </div>
+        {isAuctionsLoading ? (
+          <div className="auction-catalog-empty">Loading auctions…</div>
+        ) : (
+          <AuctionCatalog auctions={liveAuctions} variant="compact" />
+        )}
+      </section>
 
       <section className="band" id="procurement">
         <div className="sec-head">
