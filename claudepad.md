@@ -2,6 +2,21 @@
 
 ## Session Summaries
 
+### 2026-05-18 — Homepage decluttering pass
+
+Cameron pushed back on the home page being "cluttered" and "too many fucking words" — and on the editorial "file" metaphor, which read as filesystem-file to him as a developer. Surgical fix, no logic changes:
+
+- **Masthead nav**: 4 items → 3 (`Lots / Auction / Contact`). Dropped "The Almanac" (id is still in the colophon footer, just no nav link).
+- **Auth chip → text link**: Removed the multi-segment chip (display name + Admin console + My account + Sign out, or Sign in + Sign up). Replaced with a single small monospace text link: `Sign in` when logged out, `<displayName>` linking to `/account/` when logged in. New `.mast-auth` CSS rule (the stale `.auth-chip` rules remain in globals.css but no longer reference any markup). Also dropped the duplicate `Bring a file` + `Open auction` masthead CTAs — hero already has them.
+- **"file" → "lot" / "listing" / "details"**: Replaced across `FarmAuctionApp.tsx` (lot card CTAs, empty states, §01 head, §03 head + form labels, footer columns, floor-quiet, contact-block lede) and `ListingDetail.tsx` (loading state, error state, sold inquiry header, back link). Backend `name="fileType"` form field unchanged because server zod schema expects it (`server/index.ts:91`).
+- **X/100**: Stripped from the soil rating in lot card (`{listing.soilRating}` only) + listing detail stat. The bar visualization remains.
+- **"X of X" bid ledger count**: `{bids.length} of {bids.length}` → `{bids.length} bid(s)`. Was a dead duplicate that read as broken.
+- **Section ledes**: §01 trimmed to "Saskatchewan farmland — sale, lease, wanted, pending." §03 head + lede reworked to "Reach Cameron." / "Saskatchewan farmland — sale, lease, auction, or a property you're after." §02 (Auction Floor) left alone per Cameron's "the auction section itself looks okay".
+
+Wet-tested on prod (`farmauction.discordwell.com`) post-deploy at 1440×900: edition strip + new masthead clean; lot cards show soil "62" not "62/100"; "VIEW LOT →" everywhere instead of "View file"; demo admin shows as a single subtle `DEMO ADMIN` link top-right; §01 "Open lots." renders with the trimmed lede.
+
+Deploy: `npm run build` → `rsync -az --delete out/ ovh2:/opt/farmauction/site/`. No API change, so PM2 untouched. Local dev backend isn't bootable without Docker Postgres on :55432 (`docker compose up -d db` is the path) — for next session, either run Docker or `ssh -L 55432:127.0.0.1:55432 ovh2` to wet-test against prod DB.
+
 ### 2026-05-18 — Auth/login + data model (users, sessions, role-based admin/bidder)
 
 Goal: from `x-admin-key`-only to a real auth system with admin + regular bidder roles for the demo.
