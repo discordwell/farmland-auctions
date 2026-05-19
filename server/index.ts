@@ -31,6 +31,7 @@ import {
   bidderRegistrationConfirmation,
   outbidNotice
 } from "./emailTemplates.js";
+import { ensureDemoAuction, scheduleDemoLoop, stopDemoLoop } from "./demoAuction.js";
 import { startNotificationWorker, stopNotificationWorker } from "./notificationWorker.js";
 import { ApiError } from "./errors.js";
 import { auctionEvents } from "./realtime.js";
@@ -1856,6 +1857,7 @@ export async function buildServer() {
 const app = await buildServer();
 
 const shutdown = async () => {
+  stopDemoLoop();
   stopNotificationWorker();
   await app.close();
   await pool.end();
@@ -1870,3 +1872,9 @@ await app.listen({
 });
 
 startNotificationWorker();
+
+ensureDemoAuction()
+  .then(() => scheduleDemoLoop())
+  .catch((error) => {
+    console.error("[demo] initial setup failed", error);
+  });
