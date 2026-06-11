@@ -778,7 +778,7 @@ async function registerRoutes(app: FastifyInstance) {
             mailing_address = EXCLUDED.mailing_address,
             identity_document_url = EXCLUDED.identity_document_url,
             proof_of_funds_url = EXCLUDED.proof_of_funds_url,
-            user_id = COALESCE(EXCLUDED.user_id, bidders.user_id),
+            user_id = COALESCE(bidders.user_id, EXCLUDED.user_id),
             updated_at = now()
           RETURNING id
         `,
@@ -891,6 +891,12 @@ async function registerRoutes(app: FastifyInstance) {
       return result;
     }
 
+    // Idempotent replay of an already-accepted bid: return the original
+    // outcome without re-firing side effects (SSE publish, emails).
+    if (result.duplicate) {
+      return result;
+    }
+
     auctionEvents.publish(params.id, "bid.accepted", result);
     if (config.opsNotifyEmail && result.bid) {
       await enqueueNotification({
@@ -906,30 +912,20 @@ async function registerRoutes(app: FastifyInstance) {
       });
     }
 
-    // Outbid notice to the previous high bidder (different bidder than the new one).
+    // Outbid notice to the bidder this bid displaced (placeBid captured them
+    // under the row lock, so self-raises never notify). Demo auctions are
+    // skipped — their seeded bidders use fake @farmauction.demo addresses.
     // Throttle: skip if we sent one in the last 60s for this auction+bidder.
-    if (result.bid && result.bid.bidderId) {
-      const prior = await query<{
-        prior_amount_cents: string;
-        prior_email: string;
-        prior_name: string;
-        auction_title: string;
-      }>(
-        `
-          SELECT b.amount_cents AS prior_amount_cents,
-                 bd.email       AS prior_email,
-                 bd.legal_name  AS prior_name,
-                 a.title        AS auction_title
-          FROM bid_events b
-          JOIN bidders bd ON bd.id = b.bidder_id
-          JOIN auctions a ON a.id = b.auction_id
-          WHERE b.auction_id = $1
-            AND b.accepted = true
-            AND b.bidder_id <> $2
-          ORDER BY b.amount_cents DESC, b.created_at DESC
-          LIMIT 1
-        `,
-        [params.id, result.bid.bidderId]
+    const previousHigh = result.previousHighBid;
+    if (
+      previousHigh &&
+      !result.auction.isDemo &&
+      result.bid &&
+      previousHigh.bidderId !== result.bid.bidderId
+    ) {
+      const prior = await query<{ email: string; legal_name: string }>(
+        "SELECT email, legal_name FROM bidders WHERE id = $1",
+        [previousHigh.bidderId]
       );
       if (prior.rowCount && prior.rows[0]) {
         const previous = prior.rows[0];
@@ -942,20 +938,20 @@ async function registerRoutes(app: FastifyInstance) {
               AND created_at > now() - interval '60 seconds'
             LIMIT 1
           `,
-          [previous.prior_email, params.id]
+          [previous.email, params.id]
         );
         if (!recentSent.rowCount) {
           const tpl = outbidNotice({
-            bidderEmail: previous.prior_email,
-            bidderName: previous.prior_name,
-            auctionTitle: previous.auction_title,
-            previousAmountCents: Number(previous.prior_amount_cents),
+            bidderEmail: previous.email,
+            bidderName: previous.legal_name,
+            auctionTitle: result.auction.title,
+            previousAmountCents: previousHigh.amountCents,
             newHighAmountCents: result.bid.amountCents
           });
           await enqueueNotification({
             eventType: "bid.outbid",
             metadata: { auctionId: params.id, bidId: result.bid.id },
-            recipientEmail: previous.prior_email,
+            recipientEmail: previous.email,
             subject: tpl.subject,
             body: tpl.body,
             htmlBody: tpl.htmlBody
@@ -1801,7 +1797,9 @@ async function registerRoutes(app: FastifyInstance) {
       });
     }
 
-    // Won/lost emails to each approved bidder. The high bidder gets a "won" email.
+    // Won/lost emails to each approved bidder. The high bidder gets a "won"
+    // email. Demo auctions are skipped — their bidders are seeded with fake
+    // @farmauction.demo addresses.
     const winnerId = payload.auction.currentHighBidderId ?? null;
     const winningCents = payload.auction.currentHighBidCents ?? 0;
     const participants = await query<{ email: string; legal_name: string; bidder_id: string }>(
@@ -1813,7 +1811,7 @@ async function registerRoutes(app: FastifyInstance) {
       `,
       [params.auctionId]
     );
-    if (winningCents > 0) {
+    if (winningCents > 0 && !payload.auction.isDemo) {
       for (const participant of participants.rows) {
         const tpl = auctionClosedEmail({
           bidderEmail: participant.email,

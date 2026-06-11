@@ -8,6 +8,20 @@ const cad = new Intl.NumberFormat("en-CA", {
 
 const SITE_URL = config.publicSiteUrl?.replace(/\/$/, "") || "https://farmauction.discordwell.com";
 
+/**
+ * Bidder names and operator notes come from form input — escape them before
+ * interpolating into HTML bodies so a crafted "legal name" can't smuggle
+ * markup into mail we send from a trusted address.
+ */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function htmlShell(body: string) {
   return `<!doctype html>
 <html lang="en">
@@ -49,8 +63,8 @@ export function bidderRegistrationConfirmation(args: BidderRegistrationEmail) {
     `— Wyatt Farmland Auctions`;
   const html = htmlShell(
     `<h1>Registration received</h1>
-     <p>Hi ${args.bidderName},</p>
-     <p>We've received your registration for <strong>${args.auctionTitle}</strong>. Wyatt Realty Group will review your documents and notify you once approved.</p>
+     <p>Hi ${escapeHtml(args.bidderName)},</p>
+     <p>We've received your registration for <strong>${escapeHtml(args.auctionTitle)}</strong>. Wyatt Realty Group will review your documents and notify you once approved.</p>
      <p><a class="btn" href="${SITE_URL}/account/">Track your account →</a></p>`
   );
   return { subject, body: text, htmlBody: html };
@@ -75,8 +89,8 @@ export function bidderDecisionEmail(args: BidderDecisionEmail) {
       `— Wyatt Farmland Auctions`;
     const html = htmlShell(
       `<h1>You're approved to bid</h1>
-       <p>Hi ${args.bidderName},</p>
-       <p>You're approved to bid on <strong>${args.auctionTitle}</strong>. Sign in when the bell opens to place bids.</p>
+       <p>Hi ${escapeHtml(args.bidderName)},</p>
+       <p>You're approved to bid on <strong>${escapeHtml(args.auctionTitle)}</strong>. Sign in when the bell opens to place bids.</p>
        <p><a class="btn" href="${SITE_URL}/login/">Open the floor →</a></p>`
     );
     return { subject, body: text, htmlBody: html };
@@ -91,9 +105,9 @@ export function bidderDecisionEmail(args: BidderDecisionEmail) {
     `— Wyatt Farmland Auctions`;
   const html = htmlShell(
     `<h1>Registration update</h1>
-     <p>Hi ${args.bidderName},</p>
-     <p>Your registration for <strong>${args.auctionTitle}</strong> was not approved at this time.</p>
-     ${args.operatorNotes ? `<p><em>Notes:</em> ${args.operatorNotes}</p>` : ""}
+     <p>Hi ${escapeHtml(args.bidderName)},</p>
+     <p>Your registration for <strong>${escapeHtml(args.auctionTitle)}</strong> was not approved at this time.</p>
+     ${args.operatorNotes ? `<p><em>Notes:</em> ${escapeHtml(args.operatorNotes)}</p>` : ""}
      <p>Reach out to <a href="mailto:cameron@wyattrealty.ca">cameron@wyattrealty.ca</a> with questions.</p>`
   );
   return { subject, body: text, htmlBody: html };
@@ -117,8 +131,8 @@ export function outbidNotice(args: OutbidEmail) {
     `— Wyatt Farmland Auctions`;
   const html = htmlShell(
     `<h1>You've been outbid</h1>
-     <p>Hi ${args.bidderName},</p>
-     <p>Your bid of <strong>${cad.format(args.previousAmountCents / 100)}</strong> on <strong>${args.auctionTitle}</strong> has been outbid.</p>
+     <p>Hi ${escapeHtml(args.bidderName)},</p>
+     <p>Your bid of <strong>${cad.format(args.previousAmountCents / 100)}</strong> on <strong>${escapeHtml(args.auctionTitle)}</strong> has been outbid.</p>
      <p>Current high: <span class="ember">${cad.format(args.newHighAmountCents / 100)}</span></p>
      <p><a class="btn" href="${SITE_URL}/#floor">Place a new bid →</a></p>`
   );
@@ -143,8 +157,8 @@ export function auctionClosedEmail(args: AuctionClosedEmail) {
       `— Wyatt Farmland Auctions`;
     const html = htmlShell(
       `<h1>You won.</h1>
-       <p>Hi ${args.bidderName},</p>
-       <p>You won <strong>${args.auctionTitle}</strong> at <strong>${cad.format(args.winningAmountCents / 100)}</strong>.</p>
+       <p>Hi ${escapeHtml(args.bidderName)},</p>
+       <p>You won <strong>${escapeHtml(args.auctionTitle)}</strong> at <strong>${cad.format(args.winningAmountCents / 100)}</strong>.</p>
        <p>Wyatt Realty Group will contact you within 24 hours with closing instructions.</p>`
     );
     return { subject, body: text, htmlBody: html };
@@ -159,8 +173,8 @@ export function auctionClosedEmail(args: AuctionClosedEmail) {
     `— Wyatt Farmland Auctions`;
   const html = htmlShell(
     `<h1>Auction closed</h1>
-     <p>Hi ${args.bidderName},</p>
-     <p><strong>${args.auctionTitle}</strong> has closed. The winning bid was <strong>${cad.format(args.winningAmountCents / 100)}</strong>.</p>
+     <p>Hi ${escapeHtml(args.bidderName)},</p>
+     <p><strong>${escapeHtml(args.auctionTitle)}</strong> has closed. The winning bid was <strong>${cad.format(args.winningAmountCents / 100)}</strong>.</p>
      <p>Thanks for participating.</p>`
   );
   return { subject, body: text, htmlBody: html };

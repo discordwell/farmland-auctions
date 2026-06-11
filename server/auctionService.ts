@@ -11,6 +11,23 @@ type PlaceBidInput = {
   idempotencyKey: string;
 };
 
+/** High bid that an accepted live bid displaced, for outbid notifications. */
+export type PreviousHighBid = {
+  bidderId: string;
+  amountCents: number;
+} | null;
+
+export type PlaceBidResult = {
+  accepted: boolean;
+  bid: ReturnType<typeof serializeBid> | null;
+  auction: ReturnType<typeof serializeAuction>;
+  previousHighBid: PreviousHighBid;
+  duplicate?: boolean;
+  sealed?: boolean;
+  minimumBidCents?: number;
+  reason?: string;
+};
+
 async function getBidderId(client: PoolClient, input: PlaceBidInput) {
   if (input.bidderId) return input.bidderId;
 
@@ -136,8 +153,8 @@ export async function getAuction(auctionId: string) {
   };
 }
 
-export async function placeBid(input: PlaceBidInput) {
-  return withTransaction(async (client) => {
+export async function placeBid(input: PlaceBidInput): Promise<PlaceBidResult> {
+  return withTransaction(async (client): Promise<PlaceBidResult> => {
     const bidderId = await getBidderId(client, input);
 
     const lockedAuction = await client.query<QueryResultRow>(
@@ -164,6 +181,7 @@ export async function placeBid(input: PlaceBidInput) {
       return {
         accepted: Boolean(existing.rows[0].accepted),
         duplicate: true,
+        previousHighBid: null,
         bid: serializeBid(existing.rows[0]),
         auction: await loadAuctionState(client, input.auctionId)
       };
@@ -197,6 +215,7 @@ export async function placeBid(input: PlaceBidInput) {
       );
       return {
         accepted: false,
+        previousHighBid: null,
         bid,
         auction: await loadAuctionState(client, input.auctionId),
         reason: "Bid exceeds approved bidder limit"
@@ -217,6 +236,7 @@ export async function placeBid(input: PlaceBidInput) {
       );
       return {
         accepted: false,
+        previousHighBid: null,
         bid,
         auction: await loadAuctionState(client, input.auctionId),
         reason: "Auction is not open"
@@ -247,6 +267,7 @@ export async function placeBid(input: PlaceBidInput) {
       return {
         accepted: true,
         sealed: true,
+        previousHighBid: null,
         bid: serializeBid(await loadBid(client, bid.rows[0].id)),
         auction: await loadAuctionState(client, input.auctionId)
       };
@@ -266,6 +287,7 @@ export async function placeBid(input: PlaceBidInput) {
       );
       return {
         accepted: false,
+        previousHighBid: null,
         bid,
         auction: await loadAuctionState(client, input.auctionId),
         minimumBidCents: minimumBid,
@@ -274,6 +296,15 @@ export async function placeBid(input: PlaceBidInput) {
     }
 
     const nextVersion = Number(auction.version) + 1;
+    // Captured from the FOR UPDATE row before we overwrite it — this is the
+    // authoritative "who just got outbid", immune to self-raises.
+    const previousHighBid: PreviousHighBid =
+      auction.current_high_bidder_id == null
+        ? null
+        : {
+            bidderId: auction.current_high_bidder_id as string,
+            amountCents: Number(auction.current_high_bid_cents)
+          };
     const bid = await client.query<{ id: string }>(
       `
         INSERT INTO bid_events (
@@ -318,6 +349,7 @@ export async function placeBid(input: PlaceBidInput) {
 
     return {
       accepted: true,
+      previousHighBid,
       bid: serializeBid(await loadBid(client, bid.rows[0].id)),
       auction: await loadAuctionState(client, input.auctionId)
     };

@@ -50,6 +50,13 @@ function tokenHash(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
+/** Constant-time string equality; hashing first hides length differences. */
+export function constantTimeEquals(a: string, b: string): boolean {
+  const digestA = createHash("sha256").update(a).digest();
+  const digestB = createHash("sha256").update(b).digest();
+  return timingSafeEqual(digestA, digestB);
+}
+
 export function parseCookies(header: string | undefined): Record<string, string> {
   const out: Record<string, string> = {};
   if (!header) return out;
@@ -154,7 +161,7 @@ export async function requireAdmin(request: FastifyRequest): Promise<SessionUser
   if (config.adminApiKey) {
     const header = request.headers["x-admin-key"];
     const key = Array.isArray(header) ? header[0] : header;
-    if (key && key === config.adminApiKey) return null;
+    if (key && constantTimeEquals(key, config.adminApiKey)) return null;
   }
   throw new ApiError(401, "Admin access required");
 }

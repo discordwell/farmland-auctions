@@ -15,7 +15,8 @@
     "db:seed": "tsx server/db/seed.ts",
     "test:live-flow": "tsx server/tests/liveFlow.ts",
     "test:smoke": "tsx server/tests/smoke.ts",
-    "test:bidder-profile": "tsx server/tests/bidderProfile.ts"
+    "test:bidder-profile": "tsx server/tests/bidderProfile.ts",
+    "test:unit": "DATABASE_URL=postgres://unit:unit@127.0.0.1:9/unit tsx --test server/tests/unit/*.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",

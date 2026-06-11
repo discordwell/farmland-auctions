@@ -82,6 +82,7 @@ export function serializeAuction(row: QueryResultRow) {
     title: row.title as string,
     status: row.status as string,
     auctionType: row.auction_type as string,
+    isDemo: Boolean(row.is_demo),
     opensAt: row.opens_at as string,
     closesAt: row.closes_at as string,
     softCloseSeconds: Number(row.soft_close_seconds),

@@ -36,14 +36,14 @@ Browser ──► Caddy (farmauction.discordwell.com)
 
 - **Framework:** Fastify 5 + `@fastify/cors` (with `credentials: true`).
 - **Persistence:** PostgreSQL via `pg`. Migrations in `server/db/migrations/`.
-- **Auth (`server/auth.ts`):** scrypt password hashing (cost 16384, 16-byte salt, 64-byte key, format `scrypt$cost$salt$hash`, `timingSafeEqual` verify). Opaque 32-byte session tokens; only sha256 hash stored in `user_sessions`. Cookie `farmauction_session` is HttpOnly, SameSite=Lax, Path=/, 14d, Secure controlled by `config.cookieSecure` (defaults to `NODE_ENV==='production'`). `requireAdmin` checks session role first, then accepts the legacy `x-admin-key` header as a server-side fallback for prod scripts. `requireUser` gates bidder-only routes. `assertSameOriginIfBrowserPost` (allowlist against `config.corsOrigin`) protects `/api/auctions/:id/{bids,register}` from CSRF via session cookies; server-to-server callers (no Origin header) pass through.
+- **Auth (`server/auth.ts`):** scrypt password hashing (cost 16384, 16-byte salt, 64-byte key, format `scrypt$cost$salt$hash`, `timingSafeEqual` verify). Opaque 32-byte session tokens; only sha256 hash stored in `user_sessions`. Cookie `farmauction_session` is HttpOnly, SameSite=Lax, Path=/, 14d, Secure controlled by `config.cookieSecure` (defaults to `NODE_ENV==='production'`). `requireAdmin` checks session role first, then accepts the legacy `x-admin-key` header (constant-time compare) as a server-side fallback for prod scripts. `requireUser` gates bidder-only routes. `assertSameOriginIfBrowserPost` (allowlist against `config.corsOrigin`) protects `/api/auctions/:id/{bids,register}` from CSRF via session cookies; server-to-server callers (no Origin header) pass through.
 - **Routes (subset):**
   - Auth: `POST /api/auth/{signup,login,logout}`, `GET /api/auth/me`.
   - Bidder self: `GET /api/me/summary` (requires session) → `{ user, bidder, registrations, bids }`.
   - Public: `/api/listings`, `/api/auctions`, `/api/auctions/:id`, `/api/auctions/:id/events`, `/api/auctions/:id/bids`, `/api/auctions/:id/register`, `/api/contact-inquiries`, `/api/newsletter-signups`, `/api/health`.
   - Admin (session role=admin OR `x-admin-key`): `/api/admin/dashboard`, `/api/admin/listings`, `/api/admin/auctions`, `/api/admin/auctions/:id/{status,close,bidders,tasks}`, `/api/admin/inquiries`, `/api/admin/newsletter-signups`, `/api/admin/events`, `/api/admin/notifications`, `/api/admin/tasks/:id/status`.
-- **Notifications:** Outbox table; SMTP delivery when configured, retained otherwise.
-- **Idempotency:** Bids carry a client-generated `idempotencyKey` so retries don't double-record.
+- **Notifications:** Outbox table; SMTP delivery when configured, retained otherwise. HTML bodies escape user-supplied values (`escapeHtml` in `emailTemplates.ts`). Outbid notices go to the bidder captured under the bid's row lock (`placeBid` returns `previousHighBid`), so self-raises never notify; 60s per-bidder throttle. Demo auctions (`serializeAuction.isDemo`) send no outbid or won/lost emails — their seeded bidders use fake addresses.
+- **Idempotency:** Bids carry a client-generated `idempotencyKey` so retries don't double-record. Replays of an accepted bid return the original outcome without re-firing SSE publishes or emails.
 
 ## Deployment (`deploy/`)
 
@@ -62,7 +62,9 @@ npm run api:dev          # Fastify on 3510
 npm run dev              # Next on 3000 (or auto-bumped)
 ```
 
-## Smoke / live-flow tests
+## Tests
 
+- `npm run test:unit` — pure-logic unit tests (`node:test` via tsx); no DB or server needed.
 - `npm run test:smoke` — read-only sanity checks against an API.
 - `npm run test:live-flow` — end-to-end with cleanup; needs `ADMIN_API_KEY`.
+- `npm run test:bidder-profile` — bidder self-service profile flows; needs local DB + API.
