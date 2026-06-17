@@ -29,7 +29,7 @@ Browser ──► Caddy (farmauction.discordwell.com)
   - `app/admin/page.tsx` → `app/admin/AdminConsole.tsx` — operator console; gated by session role=admin (redirects to /login otherwise).
   - `app/health/page.tsx` — readiness probe.
 - **Auth (client):** `app/lib/useAuth.ts` — `useAuth() → { user, status, refresh, signOut }` reads `/api/auth/me` on mount. All authed fetches use `credentials: "include"`. No localStorage tokens; cookie is HttpOnly.
-- **Client-side state:** `useState` + `useEffect` per surface. No external store. Filtering/sorting is client-side over the listings array.
+- **Client-side state:** `useState` + `useEffect` per surface. No external store. The §01 inventory fetches every published listing once and filters/sorts in the browser; that logic is a pure, unit-tested module (`app/lib/listingFilter.ts` — `selectListings`/`sortListings`/`listingMatchesFilters`), kept in agreement with the server's `sortClauses` (notably `ppa-asc` sorts unpriced lots last, matching `price_per_acre_cents ASC NULLS LAST`).
 - **Real-time:** `EventSource("/api/auctions/:id/events")` for `bid.accepted` push; reconnect is left to the browser.
 
 ## Backend (`server/`)
@@ -65,7 +65,7 @@ npm run dev              # Next on 3000 (or auto-bumped)
 
 ## Tests
 
-- `npm run test:unit` — pure-logic unit tests (`node:test` via tsx); no DB or server needed. Covers `bidRules` (bid-acceptance math + boundaries), serializers, auth, and email-template escaping.
+- `npm run test:unit` — pure-logic unit tests (`node:test` via tsx); no DB or server needed. Covers `bidRules` (bid-acceptance math + boundaries), serializers, auth, email-template escaping, and the client inventory filter/sort (`app/lib/listingFilter.ts`).
 - `npm run test:smoke` — read-only sanity checks against an API.
 - `npm run test:live-flow` — end-to-end with cleanup; needs `ADMIN_API_KEY`.
 - `npm run test:bidder-profile` — bidder self-service profile flows; needs local DB + API.

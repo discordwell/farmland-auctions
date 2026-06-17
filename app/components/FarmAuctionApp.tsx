@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { type Listing, type ListingStatus } from "../data";
 import { useAuth } from "../lib/useAuth";
 import { anchorJump } from "../lib/anchorJump";
+import { selectListings, type ListingSortKey } from "../lib/listingFilter";
 import { AuctionCatalog, type ApiAuction } from "../auctions/AuctionCatalog";
 import { SiteHeader } from "./SiteHeader";
 
@@ -13,14 +14,17 @@ const LeafletMap = dynamic(() => import("./LeafletMap").then((m) => m.LeafletMap
   loading: () => <div className="leaflet-host" aria-label="Loading map" />
 });
 
-const SORT_OPTIONS = [
+// `value`s are pinned to ListingSortKey so this UI list can't drift from the
+// sort logic in ../lib/listingFilter (adding a key the sorter doesn't handle is
+// a compile error).
+const SORT_OPTIONS: ReadonlyArray<{ value: ListingSortKey; label: string }> = [
   { value: "newest", label: "Newest" },
   { value: "ppa-asc", label: "$ / ac · low → high" },
   { value: "ppa-desc", label: "$ / ac · high → low" },
   { value: "acres-desc", label: "Acres · high → low" },
   { value: "soil-desc", label: "Soil · high → low" }
-] as const;
-type SortKey = (typeof SORT_OPTIONS)[number]["value"];
+];
+type SortKey = ListingSortKey;
 
 const ALL_STATUSES: ListingStatus[] = ["For Sale", "Pending", "Sold", "Wanted", "Lease"];
 
@@ -623,43 +627,24 @@ export function FarmAuctionApp() {
     }
   }
 
-  const filteredListings = useMemo(() => {
-    const lc = searchQuery.trim().toLowerCase();
-    const filtered = backendListings.filter((listing) => {
-      const statusMatch = status.includes("All") || status.includes(listing.status);
-      const regionMatch = region === "All" || region === listing.region;
-      const acresMatch = !minAcres || listing.acres >= Number(minAcres);
-      const soilMatch = !minSoilRating || listing.soilRating >= Number(minSoilRating);
-      const priceMatch = !maxPricePerAcre || listing.pricePerAcre <= Number(maxPricePerAcre);
-      const queryMatch =
-        !lc ||
-        listing.title.toLowerCase().includes(lc) ||
-        listing.rm.toLowerCase().includes(lc) ||
-        listing.region.toLowerCase().includes(lc);
-      return statusMatch && regionMatch && acresMatch && soilMatch && priceMatch && queryMatch;
-    });
-    switch (sortKey) {
-      case "ppa-asc":
-        return [...filtered].sort((a, b) => a.pricePerAcre - b.pricePerAcre);
-      case "ppa-desc":
-        return [...filtered].sort((a, b) => b.pricePerAcre - a.pricePerAcre);
-      case "acres-desc":
-        return [...filtered].sort((a, b) => b.acres - a.acres);
-      case "soil-desc":
-        return [...filtered].sort((a, b) => b.soilRating - a.soilRating);
-      default:
-        return filtered;
-    }
-  }, [
-    backendListings,
-    status,
-    region,
-    minAcres,
-    minSoilRating,
-    maxPricePerAcre,
-    searchQuery,
-    sortKey
-  ]);
+  const filteredListings = useMemo(
+    () =>
+      selectListings(
+        backendListings,
+        { status, region, minAcres, minSoilRating, maxPricePerAcre, searchQuery },
+        sortKey
+      ),
+    [
+      backendListings,
+      status,
+      region,
+      minAcres,
+      minSoilRating,
+      maxPricePerAcre,
+      searchQuery,
+      sortKey
+    ]
+  );
 
   const hasActiveFilters =
     !status.includes("All") ||

@@ -2,6 +2,46 @@
 
 ## Session Summaries
 
+### 2026-06-17 13:54 UTC — Extract inventory filter/sort to a tested module + fix ppa-asc NULLS-LAST divergence
+
+Automated maintenance pass (local-only, no deploy). Continued the "pull pure logic out so it's
+documented + zero-infra testable" trajectory (same shape as the 2026-06-17 bidRules extraction), this
+time on the **frontend's primary browse surface**. The §01 inventory's filter+sort was an inline
+~35-line `useMemo` inside `FarmAuctionApp.tsx` (`filteredListings`) with **no tests** — the home page
+fetches every published listing once and does all filtering/sorting client-side, so that block is the
+authoritative browse logic.
+
+Pulled it into a new side-effect-free `app/lib/listingFilter.ts` (`selectListings`, `sortListings`,
+`listingMatchesFilters`, types `ListingLike`/`ListingFilterCriteria`/`ListingSortKey`) and rewired the
+component to call it — **behavior-preserving except one deliberate fix**:
+
+- **`ppa-asc` (price low → high) now sorts unpriced lots LAST**, matching the server's
+  `price_per_acre_cents ASC NULLS LAST` (`sortClauses` in server/index.ts). The latent bug: a NULL
+  `price_per_acre_cents` is serialized to `pricePerAcre === 0` client-side (`centsToDollars(null) = 0`),
+  so the old `a - b` floated every $0 lot (unpriced "Wanted" lots, seller drafts with no target price)
+  to the TOP of "low → high". `priceAscKey` maps a non-positive price to `+Infinity`. Latent on the
+  current fixture data (all 10 lots are priced), reachable as soon as a $0 lot is published. The other
+  three sort modes (`ppa-desc`/`acres-desc`/`soil-desc`) already put 0 last under descending order, so
+  no change there.
+- Tied `SORT_OPTIONS` to `ListingSortKey` (`ReadonlyArray<{value: ListingSortKey; label}>`, dropped the
+  `as const` self-derivation) so the dropdown can't drift from the sorter — adding a key the switch
+  doesn't handle is now a compile error.
+
+New `app/lib/listingFilter.test.ts`: 16 tests (filter predicates incl. the "All" status bypass and the
+`!value` empty-bound guard; every sort mode; the unpriced-last regression guard + a multi-unpriced
+stability case; non-mutation of input; `selectListings` composition). `test:unit` glob extended to
+`server/tests/unit/*.test.ts app/lib/*.test.ts` — these are the **first tests of any frontend logic**,
+in the same node:test/tsx zero-infra harness (the module imports nothing, so the dummy `DATABASE_URL`
+prefix is inert). Suite now **68/68** (was 52).
+
+**Verified:** `npm run test:unit` 68/68, `npx tsc --noEmit` (frontend) clean, `npx tsc --noEmit -p
+tsconfig.api.json` clean, `npm run build` (static export) clean — the `.test.ts` under `app/lib/` does
+NOT become a route and doesn't break the export (23 pages, same as before). Two independent
+code-review finder agents (behavior-preservation + cross-file integration) found **zero** correctness
+or integration bugs. **NOT live/wet-tested** — port 55432 is still the prod-DB ssh tunnel (lsof showed
+`ssh` listening), and no deploy; the change is pure client logic with no API surface touched. Next
+session with a real browser: confirm the §01 dropdown visually once a $0 lot exists.
+
 ### 2026-06-17 — Extract pure bid rules from placeBid + unit suite (zero-infra)
 
 Automated maintenance pass (local-only, no deploy). The single highest-risk untested code in the
@@ -186,3 +226,5 @@ Wet-tested at 1440×900 against `npm run dev` on port 3002 (port 3000 was held b
 - **DB tables** (server/db/migrations): `agents`, `listings`, `listing_highlights`, `bidders`, `auctions`, `auction_bidder_authorizations` (NOT `bidder_auction_authorizations`), `bid_events` (NOT `bids`), `auction_events`, `post_auction_tasks`, `contact_inquiries`, `newsletter_signups`, `notification_outbox`, `schema_migrations`.
 - **Listing slugs in the seed are stable** so re-running `npm run db:seed` upserts in place. Slugs: lipton-half-section, caron-north-quarter, vanscoy-three-quarter, coalfields-pasture, buckland-section, snipe-lake-wanted, eyebrow-quarter, edenwold-half-section, hudson-bay-pasture-lease, battle-river-quarter.
 - **The `/listings/?slug=...` route is a single static page** that reads slug from `window.location.search` (no `useSearchParams` to keep static export simple). Linking is via query string, not dynamic segment.
+- **Inventory filter/sort is a pure module:** `app/lib/listingFilter.ts` (`selectListings`/`sortListings`/`listingMatchesFilters`), unit-tested, imported by `FarmAuctionApp`. It MUST stay in agreement with the server's `sortClauses` (server/index.ts). The home page never sends `?sort=`/filter params — it fetches all published listings once and selects client-side — so this module, not the SQL, is what users actually see. Notably `ppa-asc` puts unpriced lots last (client `pricePerAcre === 0` ⇔ server `NULLS LAST`). If you add a sort mode, add it to both `LISTING_SORT_KEYS` and the server `sortClauses`.
+- **Sealed auctions are an incomplete feature — confidentiality gap (FUTURE PASS, needs a DB to fix/test).** `auction_type: "sealed"` is supported by the schema + `placeBid` (inserts the bid, fires `sealed_bid.accepted`), but: (a) `GET /api/auctions/:id/bids` → `getBidHistory` returns ALL bids with `amountCents` + `bidderAlias` (legal name) for any auction type, so a sealed auction's bids would be publicly readable before close; (b) the bids route publishes the full accepted-bid result (incl. amount/alias) over SSE even for sealed bids; (c) `placeBid`'s sealed branch never updates `current_high_*`, so closing a sealed auction computes no winner and sends no won/lost emails. No sealed-auction UI flow is wired today (demo auctions are all `live`), so it's latent — but don't ship sealed bidding without gating the read paths. Left untouched this pass: can't wet-test (prod-DB tunnel) and the intended sealed-reveal semantics aren't defined in code.
