@@ -2,6 +2,34 @@
 
 ## Session Summaries
 
+### 2026-06-17 — Extract pure bid rules from placeBid + unit suite (zero-infra)
+
+Automated maintenance pass (local-only, no deploy). The single highest-risk untested code in the
+repo was the money path: `placeBid`'s bid-acceptance decision logic lived inline, tangled with DB
+access, so the 2026-06-11 unit suite couldn't reach it. Pulled the four pure decisions out into a new
+side-effect-free `server/bidRules.ts` and rewired `placeBid` to call them — **behavior-preserving,
+verified by exact equivalence**:
+
+1. `minimumLiveBidCents(currentHigh, increment)` — `currentHigh > 0 ? currentHigh + inc : inc`. Same
+   value the public auction page computes for its "minimum next bid" hint (client/server agree).
+2. `isAuctionOpenForBids({status, nowMs, opensAtMs, closesAtMs})` — De Morgan of the old reject guard
+   `status !== "open" || now < opensAt || now > closesAt`; both window boundaries inclusive.
+3. `exceedsMaxBid(amount, maxCents|null)` — null ceiling = no limit; cap is inclusive (equal is OK).
+4. `capturePreviousHighBid(bidderId|null, cents)` — the displaced-bidder capture from under the
+   `FOR UPDATE` lock (the 2026-06-11 outbid-correctness fix), now named + tested. `PreviousHighBid`
+   type moved here; re-exported from auctionService for back-compat.
+
+New `server/tests/unit/bidRules.test.ts`: 15 tests covering opening-bid floor, negative-guard,
+window boundaries (inclusive), zero-ceiling-is-a-real-limit, strictly-above rejection, opening bid
+displaces no one. Suite is now **52/52** (was 37).
+
+**Verified:** `npm run test:unit` 52/52 green, `npx tsc --noEmit -p tsconfig.api.json` clean, `npm run
+api:build` clean. No frontend touched (no `next build` needed). **NOT live-tested** — per the
+standing note, local port 55432 is the prod-DB ssh tunnel, so DB-backed lanes
+(`test:bidder-profile`, `test:smoke`) stay off-limits; the change is a pure refactor whose tests run
+without any DB. Next session with a real local DB: a `placeBid` integration test could now assert the
+rejection reasons against these named rules.
+
 ### 2026-06-11 — Backend correctness/security pass + first zero-infra unit suite
 
 Automated maintenance pass (no human at the wheel; local-only, no deploy). Four backend fixes plus a new test lane:

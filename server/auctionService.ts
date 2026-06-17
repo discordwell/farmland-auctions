@@ -1,5 +1,12 @@
 import type { PoolClient, QueryResultRow } from "pg";
 import { ApiError } from "./errors.js";
+import {
+  capturePreviousHighBid,
+  exceedsMaxBid,
+  isAuctionOpenForBids,
+  minimumLiveBidCents,
+  type PreviousHighBid
+} from "./bidRules.js";
 import { serializeAuction, serializeBid } from "./serializers.js";
 import { query, withTransaction } from "./db/pool.js";
 
@@ -11,11 +18,9 @@ type PlaceBidInput = {
   idempotencyKey: string;
 };
 
-/** High bid that an accepted live bid displaced, for outbid notifications. */
-export type PreviousHighBid = {
-  bidderId: string;
-  amountCents: number;
-} | null;
+// `PreviousHighBid` now lives in ./bidRules alongside the pure capture logic;
+// re-exported here so existing importers of auctionService keep working.
+export type { PreviousHighBid };
 
 export type PlaceBidResult = {
   accepted: boolean;
@@ -205,7 +210,7 @@ export async function placeBid(input: PlaceBidInput): Promise<PlaceBidResult> {
       authorization.rows[0].max_bid_cents == null
         ? null
         : Number(authorization.rows[0].max_bid_cents);
-    if (maxBidCents != null && input.amountCents > maxBidCents) {
+    if (exceedsMaxBid(input.amountCents, maxBidCents)) {
       const bid = await insertRejectedBid(
         client,
         input,
@@ -226,7 +231,14 @@ export async function placeBid(input: PlaceBidInput): Promise<PlaceBidResult> {
     const opensAt = new Date(auction.opens_at as string).getTime();
     const closesAt = new Date(auction.closes_at as string).getTime();
 
-    if (auction.status !== "open" || now < opensAt || now > closesAt) {
+    if (
+      !isAuctionOpenForBids({
+        status: auction.status as string,
+        nowMs: now,
+        opensAtMs: opensAt,
+        closesAtMs: closesAt
+      })
+    ) {
       const bid = await insertRejectedBid(
         client,
         input,
@@ -275,7 +287,7 @@ export async function placeBid(input: PlaceBidInput): Promise<PlaceBidResult> {
 
     const currentHigh = Number(auction.current_high_bid_cents);
     const bidIncrement = Number(auction.bid_increment_cents);
-    const minimumBid = currentHigh > 0 ? currentHigh + bidIncrement : bidIncrement;
+    const minimumBid = minimumLiveBidCents(currentHigh, bidIncrement);
 
     if (input.amountCents < minimumBid) {
       const bid = await insertRejectedBid(
@@ -298,13 +310,10 @@ export async function placeBid(input: PlaceBidInput): Promise<PlaceBidResult> {
     const nextVersion = Number(auction.version) + 1;
     // Captured from the FOR UPDATE row before we overwrite it — this is the
     // authoritative "who just got outbid", immune to self-raises.
-    const previousHighBid: PreviousHighBid =
-      auction.current_high_bidder_id == null
-        ? null
-        : {
-            bidderId: auction.current_high_bidder_id as string,
-            amountCents: Number(auction.current_high_bid_cents)
-          };
+    const previousHighBid = capturePreviousHighBid(
+      auction.current_high_bidder_id as string | null,
+      currentHigh
+    );
     const bid = await client.query<{ id: string }>(
       `
         INSERT INTO bid_events (

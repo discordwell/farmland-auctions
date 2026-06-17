@@ -43,6 +43,7 @@ Browser ──► Caddy (farmauction.discordwell.com)
   - Public: `/api/listings`, `/api/auctions`, `/api/auctions/:id`, `/api/auctions/:id/events`, `/api/auctions/:id/bids`, `/api/auctions/:id/register`, `/api/contact-inquiries`, `/api/newsletter-signups`, `/api/health`.
   - Admin (session role=admin OR `x-admin-key`): `/api/admin/dashboard`, `/api/admin/listings`, `/api/admin/auctions`, `/api/admin/auctions/:id/{status,close,bidders,tasks}`, `/api/admin/inquiries`, `/api/admin/newsletter-signups`, `/api/admin/events`, `/api/admin/notifications`, `/api/admin/tasks/:id/status`.
 - **Notifications:** Outbox table; SMTP delivery when configured, retained otherwise. HTML bodies escape user-supplied values (`escapeHtml` in `emailTemplates.ts`). Outbid notices go to the bidder captured under the bid's row lock (`placeBid` returns `previousHighBid`), so self-raises never notify; 60s per-bidder throttle. Demo auctions (`serializeAuction.isDemo`) send no outbid or won/lost emails — their seeded bidders use fake addresses.
+- **Bidding (`server/auctionService.ts`):** `placeBid` runs inside a `withTransaction` holding a `FOR UPDATE` lock on the auction row — the single writer for bids and high-bid state. The pure decision rules (minimum next bid, open-window check, approved-bidder ceiling, displaced-bidder capture) live in `server/bidRules.ts` as side-effect-free functions so they're documented and unit-testable without a DB; `placeBid` calls them and owns all I/O and side effects. The soft-close (anti-snipe) extension stays in SQL against the DB clock.
 - **Idempotency:** Bids carry a client-generated `idempotencyKey` so retries don't double-record. Replays of an accepted bid return the original outcome without re-firing SSE publishes or emails.
 
 ## Deployment (`deploy/`)
@@ -64,7 +65,7 @@ npm run dev              # Next on 3000 (or auto-bumped)
 
 ## Tests
 
-- `npm run test:unit` — pure-logic unit tests (`node:test` via tsx); no DB or server needed.
+- `npm run test:unit` — pure-logic unit tests (`node:test` via tsx); no DB or server needed. Covers `bidRules` (bid-acceptance math + boundaries), serializers, auth, and email-template escaping.
 - `npm run test:smoke` — read-only sanity checks against an API.
 - `npm run test:live-flow` — end-to-end with cleanup; needs `ADMIN_API_KEY`.
 - `npm run test:bidder-profile` — bidder self-service profile flows; needs local DB + API.
