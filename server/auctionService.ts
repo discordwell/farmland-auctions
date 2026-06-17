@@ -8,6 +8,7 @@ import {
   type PreviousHighBid
 } from "./bidRules.js";
 import { serializeAuction, serializeBid } from "./serializers.js";
+import { publicBidHistory } from "./bidVisibility.js";
 import { query, withTransaction } from "./db/pool.js";
 
 type PlaceBidInput = {
@@ -117,6 +118,12 @@ async function loadBid(client: PoolClient, bidId: string) {
   return bid.rows[0];
 }
 
+/**
+ * Raw, unfiltered bid history. Exposes every bid's amount and bidder alias, so
+ * it is for authenticated/internal callers only (admin console, the operator
+ * close flow). Public, unauthenticated surfaces must go through
+ * `getPublicBidHistory`, which redacts sealed auctions.
+ */
 export async function getBidHistory(auctionId: string, limit = 50) {
   const result = await query(
     `
@@ -131,6 +138,27 @@ export async function getBidHistory(auctionId: string, limit = 50) {
   );
 
   return result.rows.map(serializeBid);
+}
+
+/**
+ * Bid history shaped for PUBLIC consumption: the full ledger for a live auction,
+ * empty for a sealed one (see ./bidVisibility). The unauthenticated
+ * `GET /api/auctions/:id/bids` route uses this instead of the raw
+ * `getBidHistory` so a sealed auction's bids never become publicly readable.
+ */
+export async function getPublicBidHistory(auctionId: string, limit = 50) {
+  const auction = await query<{ auction_type: string }>(
+    "SELECT auction_type FROM auctions WHERE id = $1",
+    [auctionId]
+  );
+  // Unknown auction → no bids. Matches the prior empty-list response, and the
+  // bid_events FK guarantees there are none to show anyway.
+  if (!auction.rowCount) return [];
+
+  return publicBidHistory(
+    { auctionType: auction.rows[0].auction_type },
+    await getBidHistory(auctionId, limit)
+  );
 }
 
 export async function getAuction(auctionId: string) {
@@ -152,9 +180,12 @@ export async function getAuction(auctionId: string) {
 
   if (!auction.rowCount) throw new ApiError(404, "Auction not found");
 
+  // `GET /api/auctions/:id` is public, so its bundled history is redacted for
+  // sealed auctions just like the standalone `/bids` route.
+  const serialized = serializeAuction(auction.rows[0]);
   return {
-    auction: serializeAuction(auction.rows[0]),
-    bidHistory: await getBidHistory(auctionId)
+    auction: serialized,
+    bidHistory: publicBidHistory(serialized, await getBidHistory(auctionId))
   };
 }
 

@@ -2,6 +2,52 @@
 
 ## Session Summaries
 
+### 2026-06-17 20:08 UTC — Close the sealed-auction public confidentiality gap (pure module + unit suite)
+
+Automated maintenance pass (local-only, no deploy). Acted on the standing Key-Finding TODO: **sealed
+auctions leaked bids on public surfaces.** `auction_type:"sealed"` is supported by the schema +
+`placeBid` (inserts the bid, fires `sealed_bid.accepted`) but no read path distinguished it from a
+live open-outcry, so a sealed auction's confidential bids (amount + bidder legal name) were publicly
+readable. Continued the established "pull the decision into a pure, side-effect-free, zero-infra-
+testable module" trajectory (same shape as `bidRules`/`listingFilter`).
+
+New `server/bidVisibility.ts` — the single gate, decided purely on `auctionType`, applied to **every
+public surface that could expose sealed bid/high-bid data**:
+
+1. **`GET /api/auctions/:id/bids`** → new `getPublicBidHistory` (auctionService): empty list for sealed,
+   full ledger for live. Preserves the prior 200-empty response for an unknown auction id.
+2. **`GET /api/auctions/:id`** → `getAuction` now wraps its bundled `bidHistory` in `publicBidHistory`
+   (same gate).
+3. **Accepted-bid SSE** (`POST /api/auctions/:id/bids`) → `publicBidAcceptedEvent`: live publishes the
+   full `bid.accepted` result as before; sealed publishes a **contentless `sealed_bid.accepted`** (only
+   `{auctionId}` — no amount, alias, or bidder id), mirroring the DB event `placeBid` already writes.
+4. **`auction.closed` SSE** (`POST /api/admin/auctions/:id/close`) → `publicAuctionClosedAuction` blanks
+   the high-bid fields (`currentHigh*`, `reserveMet`) for sealed before broadcast. The events stream is
+   public; this was flagged by a leak-hunting review agent as the one public surface my first three
+   fixes missed. No-op on today's data (sealed `current_high_*` are always 0/null — see gap below) but
+   defense-in-depth for the deferred sealed-reveal feature. The operator's authenticated close response
+   and the won/lost emails keep the raw values.
+
+**Behavior-preserving for LIVE auctions (the only type used today):** all four gates are the identity
+for non-sealed — `publicBidHistory(live, bids)` returns `bids`; `publicBidAcceptedEvent(live)` returns
+the exact prior `{event:"bid.accepted", payload:result}`; `publicAuctionClosedAuction(live)` returns
+the input untouched (byte-identical JSON). Two independent review agents confirmed: (1) live path fully
+preserved with file:line evidence; (2) the close-broadcast leak, now also closed.
+
+New `server/tests/unit/bidVisibility.test.ts`: 15 tests incl. confidentiality regression guards that
+`JSON.stringify` the sealed projections and assert the secret amount/alias/bidder-id do **not** appear.
+Suite now **83/83** (was 68).
+
+**Verified:** `npm run test:unit` 83/83, `npx tsc --noEmit` (frontend) + `-p tsconfig.api.json` (API)
+clean, `npm run api:build` clean. **NOT live/wet-tested** — port 55432 is the prod-DB ssh tunnel and no
+deploy; the change is server logic with no DB schema change. No sealed-auction UI is wired (demo
+auctions are all `live`), so this is latent-feature hardening, not a live-traffic fix.
+
+**Remaining sealed gap (still deferred, needs a DB + product semantics):** `placeBid`'s sealed branch
+never updates `current_high_*`, so closing a sealed auction computes no winner and sends no won/lost
+emails. Defining sealed winner-selection + the reveal flow (which losing bids, if any, become public
+after close) is the next pass — and `publicAuctionClosedAuction` must stay in place once it lands.
+
 ### 2026-06-17 13:54 UTC — Extract inventory filter/sort to a tested module + fix ppa-asc NULLS-LAST divergence
 
 Automated maintenance pass (local-only, no deploy). Continued the "pull pure logic out so it's
@@ -227,4 +273,5 @@ Wet-tested at 1440×900 against `npm run dev` on port 3002 (port 3000 was held b
 - **Listing slugs in the seed are stable** so re-running `npm run db:seed` upserts in place. Slugs: lipton-half-section, caron-north-quarter, vanscoy-three-quarter, coalfields-pasture, buckland-section, snipe-lake-wanted, eyebrow-quarter, edenwold-half-section, hudson-bay-pasture-lease, battle-river-quarter.
 - **The `/listings/?slug=...` route is a single static page** that reads slug from `window.location.search` (no `useSearchParams` to keep static export simple). Linking is via query string, not dynamic segment.
 - **Inventory filter/sort is a pure module:** `app/lib/listingFilter.ts` (`selectListings`/`sortListings`/`listingMatchesFilters`), unit-tested, imported by `FarmAuctionApp`. It MUST stay in agreement with the server's `sortClauses` (server/index.ts). The home page never sends `?sort=`/filter params — it fetches all published listings once and selects client-side — so this module, not the SQL, is what users actually see. Notably `ppa-asc` puts unpriced lots last (client `pricePerAcre === 0` ⇔ server `NULLS LAST`). If you add a sort mode, add it to both `LISTING_SORT_KEYS` and the server `sortClauses`.
-- **Sealed auctions are an incomplete feature — confidentiality gap (FUTURE PASS, needs a DB to fix/test).** `auction_type: "sealed"` is supported by the schema + `placeBid` (inserts the bid, fires `sealed_bid.accepted`), but: (a) `GET /api/auctions/:id/bids` → `getBidHistory` returns ALL bids with `amountCents` + `bidderAlias` (legal name) for any auction type, so a sealed auction's bids would be publicly readable before close; (b) the bids route publishes the full accepted-bid result (incl. amount/alias) over SSE even for sealed bids; (c) `placeBid`'s sealed branch never updates `current_high_*`, so closing a sealed auction computes no winner and sends no won/lost emails. No sealed-auction UI flow is wired today (demo auctions are all `live`), so it's latent — but don't ship sealed bidding without gating the read paths. Left untouched this pass: can't wet-test (prod-DB tunnel) and the intended sealed-reveal semantics aren't defined in code.
+- **Sealed-auction public confidentiality — GATED (2026-06-17).** The read-path leaks are closed by `server/bidVisibility.ts`, the single `auctionType`-based gate over every public surface: `getPublicBidHistory` (the `/api/auctions/:id/bids` route) and `getAuction`'s bundled history return `[]` for sealed; the accepted-bid SSE publishes a contentless `sealed_bid.accepted` (only `{auctionId}`) instead of the full `bid.accepted`; the `auction.closed` SSE blanks `current_high_*`/`reserveMet` for sealed via `publicAuctionClosedAuction`. All four are the identity for live (byte-identical behavior). Unit-tested (`server/tests/unit/bidVisibility.test.ts`, incl. stringify-and-assert-absent leak guards). If you add a public surface that returns bid or high-bid data, route it through `bidVisibility` too. Admin/operator surfaces (`requireAdmin`) and the operator close response intentionally read the RAW accessors (`getBidHistory`, full `payload`).
+- **Sealed auctions still incomplete — winner selection (FUTURE PASS, needs a DB + product semantics).** `placeBid`'s sealed branch inserts the bid + fires `sealed_bid.accepted` but **never updates `current_high_*`**, so closing a sealed auction computes no winner and sends no won/lost emails. The intended sealed-reveal semantics aren't defined in code (which losing bids, if any, become public after close). No sealed-auction UI is wired (demo auctions are all `live`), so it's latent. When implementing: keep the `bidVisibility` gates in place — `publicAuctionClosedAuction` exists precisely so a freshly-computed sealed winner doesn't leak over the public close-broadcast.

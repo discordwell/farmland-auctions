@@ -21,7 +21,8 @@ import {
   touchLogin,
   verifyPassword
 } from "./auth.js";
-import { getAuction, getBidHistory, placeBid } from "./auctionService.js";
+import { getAuction, getPublicBidHistory, placeBid } from "./auctionService.js";
+import { publicAuctionClosedAuction, publicBidAcceptedEvent } from "./bidVisibility.js";
 import { config } from "./config.js";
 import { pool, query, withTransaction } from "./db/pool.js";
 import { deliverNotification, enqueueNotification, enqueueNotificationInTransaction } from "./email.js";
@@ -723,7 +724,7 @@ async function registerRoutes(app: FastifyInstance) {
   app.get("/api/auctions/:id/bids", async (request) => {
     const params = idParamSchema.parse(request.params);
     return {
-      bids: await getBidHistory(params.id)
+      bids: await getPublicBidHistory(params.id)
     };
   });
 
@@ -897,7 +898,12 @@ async function registerRoutes(app: FastifyInstance) {
       return result;
     }
 
-    auctionEvents.publish(params.id, "bid.accepted", result);
+    // Live auctions broadcast the full accepted-bid result (amount, alias, new
+    // high bid) to the public stream; sealed auctions get a contentless
+    // `sealed_bid.accepted` signal so confidential amounts/identities never
+    // reach an unauthenticated EventSource.
+    const publicEvent = publicBidAcceptedEvent(result.auction, result);
+    auctionEvents.publish(params.id, publicEvent.event, publicEvent.payload);
     if (config.opsNotifyEmail && result.bid) {
       await enqueueNotification({
         body: [
@@ -1782,7 +1788,12 @@ async function registerRoutes(app: FastifyInstance) {
     const payload = {
       auction: await loadAuctionForAdmin(auctionId)
     };
-    auctionEvents.publish(params.auctionId, "auction.closed", payload);
+    // The events stream is public: redact a sealed auction's high-bid fields
+    // before broadcast (no-op for live, whose high bid was already public). The
+    // operator response below and the won/lost emails keep the raw `payload`.
+    auctionEvents.publish(params.auctionId, "auction.closed", {
+      auction: publicAuctionClosedAuction(payload.auction)
+    });
     if (config.opsNotifyEmail) {
       await enqueueNotification({
         body: [
