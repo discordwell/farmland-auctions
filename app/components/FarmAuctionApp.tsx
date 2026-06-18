@@ -709,6 +709,11 @@ export function FarmAuctionApp() {
   const highBidCurrent = featuredAuction?.currentHighBidDollars ?? 0;
   const secsRemaining = secondsUntil(featuredAuction?.closesAt);
   const minsRemaining = Math.floor(secsRemaining / 60);
+  // A hidden-reserve auction reveals nothing about its floor (the server redacts
+  // `reserveMet` to false; `reserveVisibility` tells that redaction apart from a
+  // genuine pending), so the stat-rail foot stays blank for it.
+  const reserveHidden =
+    !featuredAuction || featuredAuction.reserveVisibility === "hidden";
 
   const featuredListing = useMemo(() => {
     const forSale = backendListings.find((l) => l.status === "For Sale");
@@ -869,8 +874,8 @@ export function FarmAuctionApp() {
           <div className="val figure">
             {highBidCurrent > 0 ? cad.format(highBidCurrent) : "—"}
           </div>
-          <div className={featuredAuction?.reserveMet ? "foot up" : "foot"}>
-            {featuredAuction?.reserveMet ? "▲ Reserve met" : "Reserve pending"}
+          <div className={!reserveHidden && featuredAuction?.reserveMet ? "foot up" : "foot"}>
+            {reserveHidden ? "" : featuredAuction?.reserveMet ? "▲ Reserve met" : "Reserve pending"}
           </div>
         </a>
       </div>

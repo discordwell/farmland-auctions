@@ -2,6 +2,36 @@
 
 ## Session Summaries
 
+### 2026-06-18 12:46 UTC — Gate hidden-reserve met/pending off public surfaces (pure module + unit suite)
+
+Automated maintenance pass (local-only, no deploy). Same "pull the confidentiality decision into a
+pure, documented, zero-infra-testable module and make it the single gate over every public surface"
+shape as `bidVisibility` — this time for **reserve visibility**. Found a real leak: auctions have
+`reserve_visibility ∈ {hidden, met-only, public}`, but `serializeAuction` always computed `reserveMet`
+(high bid ≥ reserve) and every PUBLIC surface emitted it raw — so a **`hidden`-reserve auction's
+met/pending state was readable by anyone**, defeating the point of `hidden`. (The reserve *price* is
+never emitted by `serializeAuction`, so `reserveMet` was the one leaking bit on public surfaces.)
+
+New side-effect-free `server/reserveVisibility.ts`: `RESERVE_VISIBILITIES` (canonical level set,
+pinned to the migration-001 CHECK), `reserveMetVisible` (true only for met-only/public; **fails closed**
+for hidden + any unknown value), and `publicReserveView` (forces `reserveMet:false` for hidden,
+same-ref passthrough otherwise, never mutates, preserves `reserveVisibility` so the UI can tell a
+redaction apart from a genuine pending). Applied at **all four public surfaces**: `GET /api/auctions`
+(list), `getAuction` (`/api/auctions/:id`), the `bid.accepted` path (`result.auction` redacted once in
+the `/bids` route — covers both the POST response that the page feeds to `setAuction` AND the SSE
+fan-out), and the `auction.closed` SSE (composed `publicReserveView(publicAuctionClosedAuction(...))`).
+Admin/operator reads (`requireAdmin`, the operator close response) keep the raw `reserveMet`.
+
+Client half: the three lot surfaces that render the reserve indicator (`AuctionCatalog` card,
+`AuctionDetail` stamp, `FarmAuctionApp` home stat-rail) now suppress it when
+`reserveVisibility==='hidden'` (render `—` / nothing / blank) so the redacted `false` doesn't show as a
+misleading "Pending". New `server/tests/unit/reserveVisibility.test.ts` (12 tests): met-only/public
+passthrough, hidden + unknown redaction, fail-closed, no-mutation, same-ref, and the canonical-set
+contract. Suite **123/123** (was 111). `tsc` (api + client) and `next build` (static export) both clean.
+Code-reviewed by 3 sub-agents → no bugs. **Follow-up noted** (see Key Findings): `/api/me/summary`
+(authenticated, `requireUser`) still returns the raw reserve *price* to a registered bidder regardless
+of visibility — a separate, authenticated-surface product decision, deliberately left out of scope.
+
 ### 2026-06-18 01:22 UTC — Extract the /api/listings query builder to a pure, tested module + cross-pin sort keys
 
 Automated maintenance pass (local-only, no deploy). Continued the established "pull pure logic out so
@@ -310,3 +340,5 @@ Wet-tested at 1440×900 against `npm run dev` on port 3002 (port 3000 was held b
 - **Inventory browse is a client/server pure-module PAIR, cross-pinned (2026-06-18):** the client sorter `app/lib/listingFilter.ts` (`selectListings`/`sortListings`/`listingMatchesFilters`, imported by `FarmAuctionApp`) and the server SQL builder `server/listingQuery.ts` (`buildListingWhere` + `LISTING_SORT_CLAUSES`, imported by the `/api/listings` route) are both pure + unit-tested and MUST stay in agreement. The home page never sends `?sort=`/filter params — it fetches all published listings once and selects client-side — so the client module, not the SQL, is what users actually see; the server builder is what direct API consumers + the build-time fixtures fallback hit. Notably `ppa-asc` puts unpriced lots last (client `pricePerAcre === 0` ⇔ server `NULLS LAST`). **To add a sort mode, add the key to BOTH `LISTING_SORT_KEYS` (each module has its own copy) AND `LISTING_SORT_CLAUSES` (server) AND the client `sortListings` switch.** Both test suites assert `LISTING_SORT_KEYS` deep-equals the canonical `[newest, ppa-asc, ppa-desc, acres-desc, soil-desc]`, so a one-sided change fails a test. The listing status taxonomy (`LISTING_STATUSES`/`listingStatusSchema`) also lives in `server/listingQuery.ts` now (re-imported by the admin listing schema in index.ts).
 - **Sealed-auction public confidentiality — GATED (2026-06-17).** The read-path leaks are closed by `server/bidVisibility.ts`, the single `auctionType`-based gate over every public surface: `getPublicBidHistory` (the `/api/auctions/:id/bids` route) and `getAuction`'s bundled history return `[]` for sealed; the accepted-bid SSE publishes a contentless `sealed_bid.accepted` (only `{auctionId}`) instead of the full `bid.accepted`; the `auction.closed` SSE blanks `current_high_*`/`reserveMet` for sealed via `publicAuctionClosedAuction`. All four are the identity for live (byte-identical behavior). Unit-tested (`server/tests/unit/bidVisibility.test.ts`, incl. stringify-and-assert-absent leak guards). If you add a public surface that returns bid or high-bid data, route it through `bidVisibility` too. Admin/operator surfaces (`requireAdmin`) and the operator close response intentionally read the RAW accessors (`getBidHistory`, full `payload`).
 - **Sealed auctions still incomplete — winner selection (FUTURE PASS, needs a DB + product semantics).** `placeBid`'s sealed branch inserts the bid + fires `sealed_bid.accepted` but **never updates `current_high_*`**, so closing a sealed auction computes no winner and sends no won/lost emails. The intended sealed-reveal semantics aren't defined in code (which losing bids, if any, become public after close). No sealed-auction UI is wired (demo auctions are all `live`), so it's latent. When implementing: keep the `bidVisibility` gates in place — `publicAuctionClosedAuction` exists precisely so a freshly-computed sealed winner doesn't leak over the public close-broadcast.
+- **Reserve-met public confidentiality — GATED (2026-06-18).** `reserve_visibility ∈ {hidden, met-only, public}`. `serializeAuction` emits `reserveMet` but never the price, so the one publicly-derived reserve bit is `reserveMet`. `server/reserveVisibility.ts` (`reserveMetVisible`/`publicReserveView`, **fail-closed** for hidden + unknown) is the single gate that forces `reserveMet:false` for a `hidden` reserve on every PUBLIC surface that carries a serialized auction: `GET /api/auctions`, `getAuction` (`/api/auctions/:id`), the `bid.accepted` payload (redacted once via `result.auction = publicReserveView(result.auction)` in the `/bids` route — covers the POST response AND the SSE), and the `auction.closed` SSE (composed with `publicAuctionClosedAuction`). `reserveVisibility` is preserved through the projection so the three client lot surfaces (catalog card, detail stamp, home stat-rail) suppress the indicator for hidden instead of showing a misleading "pending". Unit-tested (`server/tests/unit/reserveVisibility.test.ts`). **If you add a public surface that returns a serialized auction, route it through `publicReserveView` too.** Admin/operator surfaces (`requireAdmin`) intentionally keep the raw `reserveMet`.
+- **FOLLOW-UP — `/api/me/summary` leaks the raw reserve PRICE to registered bidders (authenticated surface, product decision).** The bidder self-summary returns each registration row's raw `a.reserve_price_cents` + `a.reserve_visibility` regardless of visibility — so a registered bidder can read a `hidden`- or `met-only`-reserve auction's actual price via the API (the UI doesn't render it today). This is NOT a public leak (it's `requireUser`, scoped to the caller's own registrations) and was deliberately left out of the 2026-06-18 reserve gate, which only touched public surfaces and only the derived `reserveMet` bit. Closing it needs a product call: does "hidden"/"met-only" mean operator-only, or may a bidder who registered see the floor? If operator-only, redact `reserve_price_cents` (and derive a visibility-aware `reserveMet`) in the `/api/me/summary` registrations mapping. (`server/seller/summary` is fine — it returns the seller's OWN listing reserve, scoped by `seller_user_id`.)

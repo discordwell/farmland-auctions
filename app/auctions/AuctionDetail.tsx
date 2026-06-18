@@ -232,7 +232,7 @@ export function AuctionDetail({ id }: { id: string }) {
                   ) : null}
                 </div>
               </div>
-              {auction.reserveMet ? (
+              {auction.reserveVisibility === "hidden" ? null : auction.reserveMet ? (
                 <div className="stamp">
                   Reserve
                   <br />

@@ -23,6 +23,7 @@ import {
 } from "./auth.js";
 import { getAuction, getPublicBidHistory, placeBid } from "./auctionService.js";
 import { publicAuctionClosedAuction, publicBidAcceptedEvent } from "./bidVisibility.js";
+import { publicReserveView } from "./reserveVisibility.js";
 import { config } from "./config.js";
 import { pool, query, withTransaction } from "./db/pool.js";
 import { deliverNotification, enqueueNotification, enqueueNotificationInTransaction } from "./email.js";
@@ -647,8 +648,11 @@ async function registerRoutes(app: FastifyInstance) {
       `
     );
 
+    // Public catalog: redact each auction's reserve met/pending state when its
+    // visibility is hidden (see ./reserveVisibility). Sealed auctions keep their
+    // high bid out of the per-auction read paths, not this summary list.
     return {
-      auctions: result.rows.map(serializeAuction)
+      auctions: result.rows.map((row) => publicReserveView(serializeAuction(row)))
     };
   });
 
@@ -822,6 +826,13 @@ async function registerRoutes(app: FastifyInstance) {
       amountCents: body.amountCents,
       idempotencyKey: body.idempotencyKey ?? randomUUID()
     });
+
+    // `result.auction` reaches public clients on every path below — the POST
+    // response updates the caller's view (the page does `setAuction`) and the
+    // SSE fans out to every listener — so redact a hidden-reserve auction's
+    // met/pending state once, before any of them. Only `reserveMet` changes;
+    // the email/outbid logic reads `title`/`isDemo`, which pass through.
+    result.auction = publicReserveView(result.auction);
 
     if (!result.accepted) {
       reply.status(409);
@@ -1724,11 +1735,12 @@ async function registerRoutes(app: FastifyInstance) {
     const payload = {
       auction: await loadAuctionForAdmin(auctionId)
     };
-    // The events stream is public: redact a sealed auction's high-bid fields
-    // before broadcast (no-op for live, whose high bid was already public). The
-    // operator response below and the won/lost emails keep the raw `payload`.
+    // The events stream is public: redact a sealed auction's high-bid fields and
+    // a hidden-reserve auction's met/pending state before broadcast (both no-ops
+    // for a live, publicly-reserved auction). The operator response below and the
+    // won/lost emails keep the raw `payload`.
     auctionEvents.publish(params.auctionId, "auction.closed", {
-      auction: publicAuctionClosedAuction(payload.auction)
+      auction: publicReserveView(publicAuctionClosedAuction(payload.auction))
     });
     if (config.opsNotifyEmail) {
       await enqueueNotification({

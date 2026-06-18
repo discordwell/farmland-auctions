@@ -9,6 +9,7 @@ import {
 } from "./bidRules.js";
 import { serializeAuction, serializeBid } from "./serializers.js";
 import { publicBidHistory } from "./bidVisibility.js";
+import { publicReserveView } from "./reserveVisibility.js";
 import { query, withTransaction } from "./db/pool.js";
 
 type PlaceBidInput = {
@@ -180,11 +181,14 @@ export async function getAuction(auctionId: string) {
 
   if (!auction.rowCount) throw new ApiError(404, "Auction not found");
 
-  // `GET /api/auctions/:id` is public, so its bundled history is redacted for
-  // sealed auctions just like the standalone `/bids` route.
+  // `GET /api/auctions/:id` is public, so its bundled payload is redacted for
+  // confidential cases: sealed auctions hide their bid history (just like the
+  // standalone `/bids` route), and hidden-reserve auctions hide their
+  // met/pending state. `publicBidHistory` reads only `auctionType`, which
+  // `publicReserveView` leaves untouched.
   const serialized = serializeAuction(auction.rows[0]);
   return {
-    auction: serialized,
+    auction: publicReserveView(serialized),
     bidHistory: publicBidHistory(serialized, await getBidHistory(auctionId))
   };
 }

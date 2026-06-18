@@ -93,9 +93,13 @@ export function AuctionCatalog({
                 </div>
                 <div className="auction-card-stat">
                   <span className="lbl">Reserve</span>
-                  <span className={`val ${auction.reserveMet ? "ok" : "pending"}`}>
-                    {auction.reserveMet ? "Met" : "Open"}
-                  </span>
+                  {auction.reserveVisibility === "hidden" ? (
+                    <span className="val">—</span>
+                  ) : (
+                    <span className={`val ${auction.reserveMet ? "ok" : "pending"}`}>
+                      {auction.reserveMet ? "Met" : "Open"}
+                    </span>
+                  )}
                 </div>
                 <div className="auction-card-stat countdown-stat">
                   <span className="lbl">Closes in</span>
