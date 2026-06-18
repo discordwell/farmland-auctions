@@ -2,6 +2,41 @@
 
 ## Session Summaries
 
+### 2026-06-18 01:22 UTC — Extract the /api/listings query builder to a pure, tested module + cross-pin sort keys
+
+Automated maintenance pass (local-only, no deploy). Continued the established "pull pure logic out so
+it's documented + zero-infra testable" trajectory (same shape as `bidRules`/`bidVisibility`/
+`listingFilter`), this time on the **SQL half of the inventory browse**. `buildListingWhere` + the
+`sortClauses` map were ~50 inline lines in `server/index.ts` (the `/api/listings` route's `WHERE`/
+`ORDER BY` builder) with **no tests** — and the architecture doc explicitly says this must stay in
+agreement with the already-tested client sorter (`app/lib/listingFilter.ts`), yet nothing enforced it.
+
+New side-effect-free `server/listingQuery.ts` owns: `listingStatusSchema`/`LISTING_STATUSES`,
+`listingSortSchema`/`LISTING_SORT_KEYS`, `listingQuerySchema`, `LISTING_SORT_CLAUSES`
+(`Record<ListingSortKey,string>` so a missing clause is a compile error), `DEFAULT_LISTING_ORDER_BY`,
+and `buildListingWhere`. `index.ts` re-imports `buildListingWhere` (the route) + `listingStatusSchema`
+(the admin listing schema still uses it). **Byte-for-byte behavior-preserving** — the moved code is
+identical; the old inline default `"l.updated_at DESC"` is now the named `DEFAULT_LISTING_ORDER_BY`
+constant with the same value.
+
+New `server/tests/unit/listingQuery.test.ts` (27 tests): base query (published-only, default order),
+every filter incl. the `status/region "All"` bypass and the `minSoilRating=0` no-op (mirrors the client
+`!value` guard), dollars→cents conversion, multi-column `q` ILIKE against one trimmed/wildcarded
+placeholder, sequential `$n` numbering, **injection-safety** (a `'; DROP TABLE …` value lands only in
+`values`, never in the SQL string), every sort clause incl. the `ppa-asc NULLS LAST` agreement point,
+zod-rejection of bad input, and the taxonomy/`NULLS LAST` contracts. Plus **cross-pinned drift guard**:
+both `listingQuery.test.ts` and `app/lib/listingFilter.test.ts` now assert their `LISTING_SORT_KEYS`
+deep-equal the same canonical list `[newest, ppa-asc, ppa-desc, acres-desc, soil-desc]`, so adding a
+sort mode to one side (dropdown or SQL) without the other fails a test. Suite now **111/111** (was 83;
++27 server, +1 client).
+
+**Verified:** `npm run test:unit` 111/111, `npx tsc --noEmit` (frontend) + `-p tsconfig.api.json` (API)
+clean, `npm run api:build` clean, `npm run build` (static export) clean (23 pages, unchanged — the new
+`.test.ts` doesn't become a route). **NOT live/wet-tested** — port 55432 is the prod-DB ssh tunnel and
+no deploy; this is a pure refactor with no API/DB-schema change. The home page never sends `?sort=`/
+filter params (it fetches once and sorts client-side), so `buildListingWhere`'s filter/sort branches
+are otherwise UI-unexercised — which is exactly why locking their contract down with tests has value.
+
 ### 2026-06-17 20:08 UTC — Close the sealed-auction public confidentiality gap (pure module + unit suite)
 
 Automated maintenance pass (local-only, no deploy). Acted on the standing Key-Finding TODO: **sealed
@@ -272,6 +307,6 @@ Wet-tested at 1440×900 against `npm run dev` on port 3002 (port 3000 was held b
 - **DB tables** (server/db/migrations): `agents`, `listings`, `listing_highlights`, `bidders`, `auctions`, `auction_bidder_authorizations` (NOT `bidder_auction_authorizations`), `bid_events` (NOT `bids`), `auction_events`, `post_auction_tasks`, `contact_inquiries`, `newsletter_signups`, `notification_outbox`, `schema_migrations`.
 - **Listing slugs in the seed are stable** so re-running `npm run db:seed` upserts in place. Slugs: lipton-half-section, caron-north-quarter, vanscoy-three-quarter, coalfields-pasture, buckland-section, snipe-lake-wanted, eyebrow-quarter, edenwold-half-section, hudson-bay-pasture-lease, battle-river-quarter.
 - **The `/listings/?slug=...` route is a single static page** that reads slug from `window.location.search` (no `useSearchParams` to keep static export simple). Linking is via query string, not dynamic segment.
-- **Inventory filter/sort is a pure module:** `app/lib/listingFilter.ts` (`selectListings`/`sortListings`/`listingMatchesFilters`), unit-tested, imported by `FarmAuctionApp`. It MUST stay in agreement with the server's `sortClauses` (server/index.ts). The home page never sends `?sort=`/filter params — it fetches all published listings once and selects client-side — so this module, not the SQL, is what users actually see. Notably `ppa-asc` puts unpriced lots last (client `pricePerAcre === 0` ⇔ server `NULLS LAST`). If you add a sort mode, add it to both `LISTING_SORT_KEYS` and the server `sortClauses`.
+- **Inventory browse is a client/server pure-module PAIR, cross-pinned (2026-06-18):** the client sorter `app/lib/listingFilter.ts` (`selectListings`/`sortListings`/`listingMatchesFilters`, imported by `FarmAuctionApp`) and the server SQL builder `server/listingQuery.ts` (`buildListingWhere` + `LISTING_SORT_CLAUSES`, imported by the `/api/listings` route) are both pure + unit-tested and MUST stay in agreement. The home page never sends `?sort=`/filter params — it fetches all published listings once and selects client-side — so the client module, not the SQL, is what users actually see; the server builder is what direct API consumers + the build-time fixtures fallback hit. Notably `ppa-asc` puts unpriced lots last (client `pricePerAcre === 0` ⇔ server `NULLS LAST`). **To add a sort mode, add the key to BOTH `LISTING_SORT_KEYS` (each module has its own copy) AND `LISTING_SORT_CLAUSES` (server) AND the client `sortListings` switch.** Both test suites assert `LISTING_SORT_KEYS` deep-equals the canonical `[newest, ppa-asc, ppa-desc, acres-desc, soil-desc]`, so a one-sided change fails a test. The listing status taxonomy (`LISTING_STATUSES`/`listingStatusSchema`) also lives in `server/listingQuery.ts` now (re-imported by the admin listing schema in index.ts).
 - **Sealed-auction public confidentiality — GATED (2026-06-17).** The read-path leaks are closed by `server/bidVisibility.ts`, the single `auctionType`-based gate over every public surface: `getPublicBidHistory` (the `/api/auctions/:id/bids` route) and `getAuction`'s bundled history return `[]` for sealed; the accepted-bid SSE publishes a contentless `sealed_bid.accepted` (only `{auctionId}`) instead of the full `bid.accepted`; the `auction.closed` SSE blanks `current_high_*`/`reserveMet` for sealed via `publicAuctionClosedAuction`. All four are the identity for live (byte-identical behavior). Unit-tested (`server/tests/unit/bidVisibility.test.ts`, incl. stringify-and-assert-absent leak guards). If you add a public surface that returns bid or high-bid data, route it through `bidVisibility` too. Admin/operator surfaces (`requireAdmin`) and the operator close response intentionally read the RAW accessors (`getBidHistory`, full `payload`).
 - **Sealed auctions still incomplete — winner selection (FUTURE PASS, needs a DB + product semantics).** `placeBid`'s sealed branch inserts the bid + fires `sealed_bid.accepted` but **never updates `current_high_*`**, so closing a sealed auction computes no winner and sends no won/lost emails. The intended sealed-reveal semantics aren't defined in code (which losing bids, if any, become public after close). No sealed-auction UI is wired (demo auctions are all `live`), so it's latent. When implementing: keep the `bidVisibility` gates in place — `publicAuctionClosedAuction` exists precisely so a freshly-computed sealed winner doesn't leak over the public close-broadcast.

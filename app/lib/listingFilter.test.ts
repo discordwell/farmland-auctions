@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  LISTING_SORT_KEYS,
   type ListingFilterCriteria,
   type ListingLike,
   listingMatchesFilters,
@@ -214,5 +215,15 @@ describe("selectListings", () => {
   it("returns an empty array when nothing matches", () => {
     const rows = [listing({ status: "Sold" })];
     assert.deepEqual(selectListings(rows, { ...NO_FILTERS, status: ["Wanted"] }, "newest"), []);
+  });
+});
+
+describe("sort-key agreement with the server", () => {
+  // The server builds `ORDER BY` from its own `LISTING_SORT_KEYS`
+  // (server/listingQuery.ts), pinned to this same canonical list in
+  // server/tests/unit/listingQuery.test.ts. Adding a mode to the dropdown here
+  // without the matching SQL clause (or vice versa) fails one of the two tests.
+  it("offers exactly the canonical sort modes", () => {
+    assert.deepEqual([...LISTING_SORT_KEYS], ["newest", "ppa-asc", "ppa-desc", "acres-desc", "soil-desc"]);
   });
 });
