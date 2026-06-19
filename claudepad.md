@@ -2,6 +2,44 @@
 
 ## Session Summaries
 
+### 2026-06-19 04:34 UTC — Gate the reserve PRICE off the authenticated registrant surface (`/api/me/summary`)
+
+Automated maintenance pass (local-only, no deploy). Closed the standing FOLLOW-UP TODO from the
+2026-06-18 reserve gate: **`/api/me/summary` leaked the raw reserve *price* (and enough to derive
+`reserveMet`) to any registered bidder, regardless of `reserve_visibility`.** The bidder self-summary's
+registrations query joins `a.reserve_price_cents, a.reserve_visibility, a.current_high_bid_cents` and
+returned `registrations.rows` **verbatim** — so a `hidden`- or `met-only`-reserve auction's actual floor
+was readable by anyone registered for it via a direct fetch (the buyer UI's `Registration` type doesn't
+even include the field, so nothing rendered it — pure raw-API leak).
+
+**The product call** the prior session deferred ("operator-only, or may a registered bidder see the
+floor?"): resolved to **operator-only**, on three grounds — (1) the module/architecture docs already say
+a hidden floor "must not be inferable by anyone but the operator" and met-only's "price stays private";
+(2) auction theory — a concealed reserve exists precisely so *the bidders* (the only people who can bid)
+can't game it, so revealing to registered bidders defeats the format; (3) it's the safe direction
+(redacting a field no UI reads can't break working behavior). Documented the rationale in code + docs.
+
+Extended the existing pure `server/reserveVisibility.ts` (no new file — same module, now covering an
+authenticated surface too): `reservePriceVisible` (price only for `public`, fail-closed — a strict
+subset of `reserveMetVisible`) and `registrantReserveView` (projects the raw reserve columns to
+`{reserveVisibility, reservePriceCents, reserveMet}`: price only for public; `reserveMet` a real bool
+for met-only/public but **`null` = withheld** for hidden/unknown, distinct from `false` = not-met; met
+math mirrors `serializeAuction` — positive reserve the high bid has reached). Applied in the
+`/api/me/summary` registrations `.map` (spreads the row, overrides `reserve_price_cents`, adds
+`reserve_met`); `reserve_visibility` + `current_high_bid_cents` pass through (the latter public for live,
+0 for sealed today — commented as the next thing to gate when sealed winner-selection lands).
+
+New tests in `server/tests/unit/reserveVisibility.test.ts` (+11): `reservePriceVisible` (public-only,
+fail-closed, subset-of-met invariant), `registrantReserveView` (public exposes price+met, met-only
+withholds price/reports met, hidden withholds both as null, unknown fails closed, boundary math incl.
+zero-reserve, numeric+null-high inputs, and a **stringify-and-assert-the-`80000000`-floor-is-absent**
+regression guard like bidVisibility's). Suite **134/134** (was 123).
+
+**Verified:** `npm run test:unit` 134/134, `npx tsc --noEmit` (frontend) + `-p tsconfig.api.json` (API)
+clean, `npm run api:build` + `npm run build` (static export) both exit 0. **NOT live/wet-tested** — port
+55432 is the prod-DB ssh tunnel and no deploy; this is server logic with no DB-schema change, and the
+leaking field is UI-unrendered so there's nothing to wet-test visually.
+
 ### 2026-06-18 12:46 UTC — Gate hidden-reserve met/pending off public surfaces (pure module + unit suite)
 
 Automated maintenance pass (local-only, no deploy). Same "pull the confidentiality decision into a
@@ -341,4 +379,4 @@ Wet-tested at 1440×900 against `npm run dev` on port 3002 (port 3000 was held b
 - **Sealed-auction public confidentiality — GATED (2026-06-17).** The read-path leaks are closed by `server/bidVisibility.ts`, the single `auctionType`-based gate over every public surface: `getPublicBidHistory` (the `/api/auctions/:id/bids` route) and `getAuction`'s bundled history return `[]` for sealed; the accepted-bid SSE publishes a contentless `sealed_bid.accepted` (only `{auctionId}`) instead of the full `bid.accepted`; the `auction.closed` SSE blanks `current_high_*`/`reserveMet` for sealed via `publicAuctionClosedAuction`. All four are the identity for live (byte-identical behavior). Unit-tested (`server/tests/unit/bidVisibility.test.ts`, incl. stringify-and-assert-absent leak guards). If you add a public surface that returns bid or high-bid data, route it through `bidVisibility` too. Admin/operator surfaces (`requireAdmin`) and the operator close response intentionally read the RAW accessors (`getBidHistory`, full `payload`).
 - **Sealed auctions still incomplete — winner selection (FUTURE PASS, needs a DB + product semantics).** `placeBid`'s sealed branch inserts the bid + fires `sealed_bid.accepted` but **never updates `current_high_*`**, so closing a sealed auction computes no winner and sends no won/lost emails. The intended sealed-reveal semantics aren't defined in code (which losing bids, if any, become public after close). No sealed-auction UI is wired (demo auctions are all `live`), so it's latent. When implementing: keep the `bidVisibility` gates in place — `publicAuctionClosedAuction` exists precisely so a freshly-computed sealed winner doesn't leak over the public close-broadcast.
 - **Reserve-met public confidentiality — GATED (2026-06-18).** `reserve_visibility ∈ {hidden, met-only, public}`. `serializeAuction` emits `reserveMet` but never the price, so the one publicly-derived reserve bit is `reserveMet`. `server/reserveVisibility.ts` (`reserveMetVisible`/`publicReserveView`, **fail-closed** for hidden + unknown) is the single gate that forces `reserveMet:false` for a `hidden` reserve on every PUBLIC surface that carries a serialized auction: `GET /api/auctions`, `getAuction` (`/api/auctions/:id`), the `bid.accepted` payload (redacted once via `result.auction = publicReserveView(result.auction)` in the `/bids` route — covers the POST response AND the SSE), and the `auction.closed` SSE (composed with `publicAuctionClosedAuction`). `reserveVisibility` is preserved through the projection so the three client lot surfaces (catalog card, detail stamp, home stat-rail) suppress the indicator for hidden instead of showing a misleading "pending". Unit-tested (`server/tests/unit/reserveVisibility.test.ts`). **If you add a public surface that returns a serialized auction, route it through `publicReserveView` too.** Admin/operator surfaces (`requireAdmin`) intentionally keep the raw `reserveMet`.
-- **FOLLOW-UP — `/api/me/summary` leaks the raw reserve PRICE to registered bidders (authenticated surface, product decision).** The bidder self-summary returns each registration row's raw `a.reserve_price_cents` + `a.reserve_visibility` regardless of visibility — so a registered bidder can read a `hidden`- or `met-only`-reserve auction's actual price via the API (the UI doesn't render it today). This is NOT a public leak (it's `requireUser`, scoped to the caller's own registrations) and was deliberately left out of the 2026-06-18 reserve gate, which only touched public surfaces and only the derived `reserveMet` bit. Closing it needs a product call: does "hidden"/"met-only" mean operator-only, or may a bidder who registered see the floor? If operator-only, redact `reserve_price_cents` (and derive a visibility-aware `reserveMet`) in the `/api/me/summary` registrations mapping. (`server/seller/summary` is fine — it returns the seller's OWN listing reserve, scoped by `seller_user_id`.)
+- **Reserve PRICE on the authenticated registrant surface — RESOLVED operator-only (2026-06-19).** `/api/me/summary` used to return each registration row's raw `a.reserve_price_cents` (+ `reserve_visibility`, `current_high_bid_cents`) verbatim, so a registered bidder could read a `hidden`/`met-only` auction's actual floor via a direct fetch (no UI rendered it). The deferred product call — operator-only, or may a registrant see the floor? — was resolved **operator-only**: a concealed reserve exists to keep *the bidders* in the dark (they're the only ones who can bid), and the docs already said a hidden floor "must not be inferable by anyone but the operator." Now gated by `registrantReserveView` in `server/reserveVisibility.ts` (price only for `public` via `reservePriceVisible`; `reserveMet` a real bool for met-only/public but **`null`=withheld** for hidden/unknown; same module that gates the public surfaces, now extended to this one authenticated surface). Applied in the `/api/me/summary` registrations `.map`. Unit-tested (`reserveVisibility.test.ts`, incl. a stringify-floor-absent guard). **`current_high_bid_cents` is still passed through raw** there — public for a live auction, 0 for sealed today; gate it through `bidVisibility` here too once sealed winner-selection writes `current_high_*`. (`server/seller/summary` was already fine — seller's OWN listing reserve, scoped by `seller_user_id`.)

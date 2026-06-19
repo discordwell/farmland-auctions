@@ -23,7 +23,7 @@ import {
 } from "./auth.js";
 import { getAuction, getPublicBidHistory, placeBid } from "./auctionService.js";
 import { publicAuctionClosedAuction, publicBidAcceptedEvent } from "./bidVisibility.js";
-import { publicReserveView } from "./reserveVisibility.js";
+import { publicReserveView, registrantReserveView } from "./reserveVisibility.js";
 import { config } from "./config.js";
 import { pool, query, withTransaction } from "./db/pool.js";
 import { deliverNotification, enqueueNotification, enqueueNotificationInTransaction } from "./email.js";
@@ -445,7 +445,27 @@ async function registerRoutes(app: FastifyInstance) {
     return {
       user,
       bidder,
-      registrations: registrations.rows,
+      // The registrations query joins the auction's raw reserve columns; redact
+      // them to the bidder's confidentiality posture before they leave the API.
+      // A registered bidder is the room a concealed reserve exists to keep in the
+      // dark, so a `hidden`/`met-only` floor's PRICE is operator-only and a
+      // `hidden` floor's met state stays withheld — the same standard the public
+      // surfaces are held to (see ./reserveVisibility). The buyer portal renders
+      // none of these fields today; this hardens the raw response against a
+      // direct fetch. `current_high_bid_cents` is public for a live auction and
+      // 0 for sealed today; gate it here too once sealed winner-selection lands.
+      registrations: registrations.rows.map((row) => {
+        const reserve = registrantReserveView({
+          reserveVisibility: row.reserve_visibility,
+          reservePriceCents: row.reserve_price_cents,
+          currentHighBidCents: row.current_high_bid_cents
+        });
+        return {
+          ...row,
+          reserve_price_cents: reserve.reservePriceCents,
+          reserve_met: reserve.reserveMet
+        };
+      }),
       bids: bids.rows,
       watchlist: watchlist.rows.map((row) => ({
         id: row.id,
