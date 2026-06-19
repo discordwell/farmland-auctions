@@ -23,7 +23,7 @@ Browser ──► Caddy (farmauction.discordwell.com)
 - **Pages:**
   - `app/page.tsx` → `app/components/FarmAuctionApp.tsx` — public surface (edition strip, masthead with auth chip, hero, stat rail, §01 Inventory, §02 Floor, §03 Procurement, colophon).
   - `app/bidder-terms/page.tsx` — §04 terms of the bell, static markdown-style list.
-  - `app/login/page.tsx` — §05 sign-in form (`?next=` honored if same-site).
+  - `app/login/page.tsx` — §05 sign-in form. The post-login `?next=` redirect is honored only for same-site paths via the pure, unit-tested `app/lib/safeNextPath.ts` (rejects off-origin URLs, protocol-relative `//host`, and the backslash/control-char bypasses a naive `startsWith` check misses) so the login page can't be turned into an open redirect.
   - `app/signup/page.tsx` — §06 open self-serve signup (creates `role=user` accounts).
   - `app/account/page.tsx` — §02·c logged-in bidder dashboard (profile, registrations, bid ledger).
   - `app/admin/page.tsx` → `app/admin/AdminConsole.tsx` — operator console; gated by session role=admin (redirects to /login otherwise).
@@ -68,7 +68,7 @@ npm run dev              # Next on 3000 (or auto-bumped)
 
 ## Tests
 
-- `npm run test:unit` — pure-logic unit tests (`node:test` via tsx); no DB or server needed. Covers `bidRules` (bid-acceptance math + boundaries), `bidVisibility` (sealed-auction redaction), `reserveVisibility` (hidden-reserve redaction on public surfaces + the `/api/me/summary` registrant price/met gate + canonical level set), `listingQuery` (the `/api/listings` `WHERE`/`ORDER BY` builder + injection-safety), serializers, auth, email-template escaping, and the client inventory filter/sort (`app/lib/listingFilter.ts`).
+- `npm run test:unit` — pure-logic unit tests (`node:test` via tsx); no DB or server needed. Covers `bidRules` (bid-acceptance math + boundaries), `bidVisibility` (sealed-auction redaction), `reserveVisibility` (hidden-reserve redaction on public surfaces + the `/api/me/summary` registrant price/met gate + canonical level set), `listingQuery` (the `/api/listings` `WHERE`/`ORDER BY` builder + injection-safety), serializers, auth, email-template escaping, the client inventory filter/sort (`app/lib/listingFilter.ts`), and the post-login open-redirect guard (`app/lib/safeNextPath.ts`).
 - `npm run test:smoke` — read-only sanity checks against an API.
 - `npm run test:live-flow` — end-to-end with cleanup; needs `ADMIN_API_KEY`.
 - `npm run test:bidder-profile` — bidder self-service profile flows; needs local DB + API.

@@ -2,6 +2,48 @@
 
 ## Session Summaries
 
+### 2026-06-19 07:23 UTC — Close the post-login open-redirect (`?next=`) via a pure, tested guard
+
+Automated maintenance pass (local-only, no deploy). Found and fixed a real **open-redirect (CWE-601)**
+on the sign-in page. `app/login/page.tsx`'s `readNextParam` honored the post-login `?next=` URL param
+after checking only `!next.startsWith("/") || next.startsWith("//")`, then handed the result to
+`window.location.assign`. That naive guard is bypassable because the browser URL parser **normalizes
+backslash → "/" and strips TAB/LF/CR mid-URL before resolving** — so `?next=/\evil.com` and
+`?next=/<TAB>/evil.com` both pass the check yet resolve to `https://evil.com/`. Verified the escape
+with `new URL(...)` in Node (matches browser WHATWG parsing): old guard PASSED three off-origin values.
+A crafted login link is a post-auth phishing vector (land the victim on a look-alike after they sign in).
+
+Continued the repo's established "pull the decision into a pure, side-effect-free, unit-tested module"
+trajectory (same shape as `bidRules`/`bidVisibility`/`reserveVisibility`/`listingFilter`). New
+`app/lib/safeNextPath.ts` — `safeNextPath(next): string` returns the value only for a safe absolute
+same-site path, `""` otherwise (caller falls back to its role-based default). It **rejects every C0
+control char + DEL + backslash anywhere in the value, then requires a single leading slash not followed
+by another**. Implemented with `charCodeAt` against explicit code points (47 `/`, 92 `\`, 127 DEL)
+rather than a regex — the screened set is exactly the one that's easy to get wrong escaping a regex
+literal. `login/page.tsx` `readNextParam` now delegates to it (only behavioral change: the two bypass
+classes are now blocked; all legitimate same-site paths pass through unchanged).
+
+New `app/lib/safeNextPath.test.ts` (+22 tests): accepts same-site paths (incl. `/`, `/#hash`, `/?query`),
+rejects null/empty, protocol-relative, scheme'd absolutes, no-leading-slash, `javascript:`/`data:`, the
+backslash bypass, the TAB/LF/CR/NUL/DEL bypass, plus a **security invariant** test that sweeps the full
+attack matrix and asserts every non-empty return resolves on-origin (`new URL(out, ORIGIN).origin ===
+ORIGIN`). Control chars/backslash are built via `String.fromCharCode` so the test source can't itself be
+misread. Suite **156/156** (was 134).
+
+Other redirect sinks audited & confirmed safe (no change needed): `signup/page.tsx` (`next` is a literal
+`/seller/`|`/buyer/`, not user input) and `listings/LegacySlugRedirect.tsx` (`encodeURIComponent(slug)`
+percent-encodes `/`,`\`,`:` so a hostile slug stays on-origin).
+
+**Adversarial code-review sub-agent** swept every BMP code point in the leading-slash position and proved
+the WHATWG parser's authority-introducing set there is exactly `{TAB, LF, CR, "/", "\"}` — all rejected;
+the guard's danger-miss set is empty. No bypass; integration clean; no false positives.
+
+**Verified:** `npm run test:unit` 156/156, `npx tsc --noEmit` (frontend) clean, `npm run build` (static
+export) exit 0 (23 pages, unchanged — the new `app/lib/*.ts(.test)` don't become routes). **NOT
+wet-tested** — no deploy; this is pure client logic with no API/DB surface touched. Next session with a
+real browser: confirm `/login/?next=/account/` still lands on `/account/` and `?next=/\evil.com` falls
+back to the role default.
+
 ### 2026-06-19 04:34 UTC — Gate the reserve PRICE off the authenticated registrant surface (`/api/me/summary`)
 
 Automated maintenance pass (local-only, no deploy). Closed the standing FOLLOW-UP TODO from the
@@ -380,3 +422,4 @@ Wet-tested at 1440×900 against `npm run dev` on port 3002 (port 3000 was held b
 - **Sealed auctions still incomplete — winner selection (FUTURE PASS, needs a DB + product semantics).** `placeBid`'s sealed branch inserts the bid + fires `sealed_bid.accepted` but **never updates `current_high_*`**, so closing a sealed auction computes no winner and sends no won/lost emails. The intended sealed-reveal semantics aren't defined in code (which losing bids, if any, become public after close). No sealed-auction UI is wired (demo auctions are all `live`), so it's latent. When implementing: keep the `bidVisibility` gates in place — `publicAuctionClosedAuction` exists precisely so a freshly-computed sealed winner doesn't leak over the public close-broadcast.
 - **Reserve-met public confidentiality — GATED (2026-06-18).** `reserve_visibility ∈ {hidden, met-only, public}`. `serializeAuction` emits `reserveMet` but never the price, so the one publicly-derived reserve bit is `reserveMet`. `server/reserveVisibility.ts` (`reserveMetVisible`/`publicReserveView`, **fail-closed** for hidden + unknown) is the single gate that forces `reserveMet:false` for a `hidden` reserve on every PUBLIC surface that carries a serialized auction: `GET /api/auctions`, `getAuction` (`/api/auctions/:id`), the `bid.accepted` payload (redacted once via `result.auction = publicReserveView(result.auction)` in the `/bids` route — covers the POST response AND the SSE), and the `auction.closed` SSE (composed with `publicAuctionClosedAuction`). `reserveVisibility` is preserved through the projection so the three client lot surfaces (catalog card, detail stamp, home stat-rail) suppress the indicator for hidden instead of showing a misleading "pending". Unit-tested (`server/tests/unit/reserveVisibility.test.ts`). **If you add a public surface that returns a serialized auction, route it through `publicReserveView` too.** Admin/operator surfaces (`requireAdmin`) intentionally keep the raw `reserveMet`.
 - **Reserve PRICE on the authenticated registrant surface — RESOLVED operator-only (2026-06-19).** `/api/me/summary` used to return each registration row's raw `a.reserve_price_cents` (+ `reserve_visibility`, `current_high_bid_cents`) verbatim, so a registered bidder could read a `hidden`/`met-only` auction's actual floor via a direct fetch (no UI rendered it). The deferred product call — operator-only, or may a registrant see the floor? — was resolved **operator-only**: a concealed reserve exists to keep *the bidders* in the dark (they're the only ones who can bid), and the docs already said a hidden floor "must not be inferable by anyone but the operator." Now gated by `registrantReserveView` in `server/reserveVisibility.ts` (price only for `public` via `reservePriceVisible`; `reserveMet` a real bool for met-only/public but **`null`=withheld** for hidden/unknown; same module that gates the public surfaces, now extended to this one authenticated surface). Applied in the `/api/me/summary` registrations `.map`. Unit-tested (`reserveVisibility.test.ts`, incl. a stringify-floor-absent guard). **`current_high_bid_cents` is still passed through raw** there — public for a live auction, 0 for sealed today; gate it through `bidVisibility` here too once sealed winner-selection writes `current_high_*`. (`server/seller/summary` was already fine — seller's OWN listing reserve, scoped by `seller_user_id`.)
+- **Post-login open-redirect — CLOSED (2026-06-19).** The sign-in page honors a `?next=` redirect after login and passes it to `window.location.assign`. The guard is `app/lib/safeNextPath.ts` (`safeNextPath(next): string` — returns the value only for a safe absolute same-site path, `""` otherwise). It rejects all C0 control chars + DEL + backslash anywhere in the value, then requires one leading slash not followed by another — closing the two bypasses a naive `startsWith("/") && !startsWith("//")` misses: **backslash** (`/\evil.com`, browsers parse `\`→`/`) and **TAB/LF/CR** (`/<TAB>/evil.com`, stripped mid-URL), both of which resolve to `https://evil.com/`. Implemented with `charCodeAt` against explicit code points (no regex — that's the easy-to-mis-escape part). `login/page.tsx`'s `readNextParam` is the only consumer; `signup`/`LegacySlugRedirect` redirects are not user-controlled (literal / `encodeURIComponent`'d). Unit-tested (`app/lib/safeNextPath.test.ts`, incl. a full-attack-matrix invariant that every non-empty return resolves on-origin). **If you add another surface that redirects to a user-supplied value, route it through `safeNextPath`.**

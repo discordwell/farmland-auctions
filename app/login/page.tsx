@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { loginRequest, type AuthUser } from "../lib/useAuth";
+import { safeNextPath } from "../lib/safeNextPath";
 
 type DemoAccount = {
   role: "admin" | "user";
@@ -34,11 +35,11 @@ const demoAccounts: DemoAccount[] = [
 function readNextParam(): string {
   if (typeof window === "undefined") return "";
   const params = new URLSearchParams(window.location.search);
-  const next = params.get("next");
-  if (!next) return "";
-  // Only honor same-site paths to avoid open-redirect surprises.
-  if (!next.startsWith("/") || next.startsWith("//")) return "";
-  return next;
+  // Only honor same-site paths to avoid open-redirect surprises. The guard lives
+  // in a pure, unit-tested module (see ../lib/safeNextPath) because the naive
+  // startsWith check it replaces let "/\evil.com" and "/<TAB>/evil.com" slip
+  // through to window.location.assign and navigate off-origin.
+  return safeNextPath(params.get("next"));
 }
 
 function redirectAfterLogin(user: AuthUser) {
